@@ -1,4 +1,4 @@
-# 🏥 Clinical Data Intelligence System (CDIS)
+# Clinical Data Intelligence System
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-green.svg)
@@ -6,18 +6,18 @@
 ![Vector Search](https://img.shields.io/badge/pgvector-Semantic_Search-orange.svg)
 ![Status](https://img.shields.io/badge/Status-Development-yellow.svg)
 
-## 🌟 Overview
+## Overview
 The **Clinical Data Intelligence System (CDIS)** is a next-generation AI-powered backend designed for healthcare providers. It solves the "Unstructured Data Problem" in clinical environments by combining traditional relational record-keeping with advanced **Semantic Search** and **AI Agent orchestration**.
 
-### 💡 The Problem
+### The Problem
 In modern clinics, over 80% of patient data exists in unstructured "Clinical Notes." Traditional systems cannot query this data efficiently. Doctors struggle to find historical patterns in patients' notes, leading to delayed diagnoses and cognitive load.
 
-### 🚀 The Solution
+### The Solution
 CDIS utilizes a **Hybrid Retrieval-Augmented Generation (RAG)** architecture. It allows administrators to query structured data (billing, staff, inventory) via SQL and enables doctors to perform semantic search across millions of words of clinical notes using AI vectors—all while maintaining a **Privacy-First** local-first architecture.
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 *   **Backend:** FastAPI (Python) - High performance, asynchronous.
 *   **Database:** PostgreSQL 16 + `pgvector` for vector similarity search.
 *   **ORM:** SQLAlchemy 2.0 with Alembic for migrations.
@@ -27,7 +27,7 @@ CDIS utilizes a **Hybrid Retrieval-Augmented Generation (RAG)** architecture. It
 
 ---
 
-## 🏗 System Architecture
+## System Architecture
 ```mermaid
 graph TD
     User([Doctor / Admin]) --> API[FastAPI Entry Point]
@@ -51,7 +51,7 @@ graph TD
 
 ---
 
-## 🔑 Key Features
+## Key Features
 *   **Semantic Note Retrieval:** Find "patients with respiratory signs who didn't respond to antibiotics" using meaning, not just keywords.
 *   **Agentic Workflows:** The AI agent automatically decides whether a user query needs a data table (SQL) or a note summary (RAG).
 *   **High Volume Seeding:** Pre-configured with **5,000+** realistic clinical records and appointments.
@@ -59,7 +59,7 @@ graph TD
 
 ---
 
-## 📈 Future Production Roadmap
+## Future Production Roadmap
 Currently, the system uses **Local Embedding Models** for maximum privacy. For enterprise production, the architecture is ready to scale to:
 1.  **Cloud Embeddings:** Integration with OpenAI (text-embedding-3-small) or Voyage AI.
 2.  **Distributed Task Queues:** Moving embedding generation to Celery/Redis for real-time note processing.
@@ -67,7 +67,25 @@ Currently, the system uses **Local Embedding Models** for maximum privacy. For e
 
 ---
 
-## 🔧 Setup & Installation
+---
+
+## Project Structure
+```text
+├── app/
+│   ├── db/              # Database connection & session management
+│   ├── models/          # SQLAlchemy ORM models (Clinical, Logs)
+│   ├── services/        # Business logic & AI Orchestration (LangGraph)
+│   └── main.py          # FastAPI application entry point
+├── docs/                # Technical & Business documentation
+├── migrations/          # Alembic database migration scripts
+├── scripts/             # Data seeding & AI embedding utilities
+├── .env.example         # Environment variable template
+└── requirements.txt     # Python dependencies
+```
+
+---
+
+## Setup & Installation
 1.  **Clone & Venv:**
     ```bash
     python3 -m venv venv
@@ -88,7 +106,7 @@ Currently, the system uses **Local Embedding Models** for maximum privacy. For e
 
 ---
 
-## 📄 Documentation
+## Documentation
 Detailed technical and business documentation can be found in the `/docs` folder:
 *   [Architectural Decision Records (ADR)](docs/ARCHITECTURAL_DECISIONS.md)
 *   [Data Privacy & Compliance (NZ)](docs/DATA_PRIVACY_REPORT.md)

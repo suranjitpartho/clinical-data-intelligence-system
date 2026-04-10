@@ -16,9 +16,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.services.agent import clinical_agent
+from pydantic import BaseModel
+
+class QueryRequest(BaseModel):
+    query: str
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to Clinical Data Intelligence System API", "docs": "/docs"}
+
+@app.post("/ai/query")
+async def ask_agent(request: QueryRequest):
+    """
+    Orchestrates the query through the LangGraph agent.
+    """
+    initial_state = {
+        "query": request.query,
+        "messages": [],
+        "next_step": "",
+        "data_results": [],
+        "final_answer": ""
+    }
+    
+    result = clinical_agent.invoke(initial_state)
+    
+    return {
+        "answer": result["final_answer"],
+        "logic_path": result["next_step"],
+        "data_count": len(result["data_results"])
+    }
 
 if __name__ == "__main__":
     import uvicorn

@@ -10,7 +10,7 @@ class AuditLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     
     user_query = Column(Text)
-    tool_used = Column(String)  # SQL, RAG
-    tool_query = Column(Text)   # The actual SQL or the Vector search query
-    status = Column(String)     # Success, Failed, Fixed (if self-corrected)
+    tool_used = Column(String) # SQL vs RAG
+    tool_query = Column(Text) # The actual SQL or Vector query
+    status = Column(String) # Success/Error
     result_summary = Column(Text)
