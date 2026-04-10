@@ -32,8 +32,8 @@ class ClinicalNote(Base):
     appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id"), nullable=False)
     
     content = Column(Text, nullable=False)
-    # Claude-compatible or Voyage AI embedding dimension (typically 1536)
-    vector = Column(Vector(1536))
+    # Using 1024 dimensions for local powerful models like BGE-Large or BGE-M3
+    vector = Column(Vector(1024))
     
     appointment = relationship("Appointment", back_populates="note")
 
