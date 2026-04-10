@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
-    title="ClearPath Medical Intelligence API",
-    description="AI-powered clinical ERP for ClearPath Medical Centre",
+    title="Clinical Data Intelligence System API",
+    description="AI-powered clinical intelligence for a private medical clinic",
     version="0.1.0"
 )
 
@@ -18,7 +18,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to ClearPath Medical Intelligence API", "docs": "/docs"}
+    return {"message": "Welcome to Clinical Data Intelligence System API", "docs": "/docs"}
 
 if __name__ == "__main__":
     import uvicorn

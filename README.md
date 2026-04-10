@@ -1,6 +1,6 @@
-# ClearPath Medical Intelligence (AI + RAG)
+# Clinical Data Intelligence System (AI + RAG)
 
-An AI-powered clinical ERP system for **ClearPath Medical Centre**, a fictional private medical clinic in New Zealand.
+An AI-powered clinical data intelligence system designed for a fictional private medical clinic in New Zealand.
 
 This system demonstrates the integration of **LangGraph AI Agents** with both structured relational data (SQL) and unstructured clinical notes (Vector RAG) to provide real-time clinical insights.
 

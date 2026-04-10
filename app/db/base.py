@@ -1,14 +1,22 @@
-from sqlalchemy import create_all
+import os
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/clinical_db")
+# Build Connection String Safely
+user = os.getenv("DB_USER", "postgres")
+password = os.getenv("DB_PASS", "")
+host = os.getenv("DB_HOST", "localhost")
+port = os.getenv("DB_PORT", "5432")
+db_name = os.getenv("DB_NAME", "clinical_db")
 
-from sqlalchemy import create_engine
+# quote_plus handles special characters in passwords (like @, #, etc.)
+DATABASE_URL = f"postgresql://{user}:{quote_plus(password)}@{host}:{port}/{db_name}"
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
