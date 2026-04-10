@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-off-white: #F9FAFB;
+  --color-dark-grey: #374151;
+  --color-clinical-blue: #06B6D4;
+}
+
+@layer base {
+  body {
+    @apply bg-off-white text-dark-grey antialiased;
+  }
+}
+
+.chat-bubble-user {
+  @apply bg-dark-grey text-white rounded-2xl rounded-tr-none px-4 py-2 shadow-sm;
+}
+
+.chat-bubble-ai {
+  @apply bg-white text-dark-grey border border-gray-200 rounded-2xl rounded-tl-none px-4 py-2 shadow-sm;
+}

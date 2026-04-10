@@ -21,17 +21,21 @@ CDIS utilizes a **Hybrid Retrieval-Augmented Generation (RAG)** architecture. It
 *   **Backend:** FastAPI (Python) - High performance, asynchronous.
 *   **Database:** PostgreSQL 16 + `pgvector` for vector similarity search.
 *   **ORM:** SQLAlchemy 2.0 with Alembic for migrations.
-*   **Local AI (Embeddings):** `BAAI/bge-m3` running locally on Apple Silicon (M5).
-*   **AI Orchestration:** LangGraph (AI Agentic workflows).
+*   **Local AI (Inference):** Native Apple **MLX Framework** running **Llama-3 (8B)**.
+*   **Local AI (Embeddings):** `BAAI/bge-m3` running locally on Apple Silicon.
+*   **AI Orchestration:** Provider-agnostic Agent (Supports Local MLX, OpenAI, and Anthropic).
 *   **Compliance:** Designed with NZ Health Information Security (HISO) principles.
 
 ---
 
-## System Architecture
 ```mermaid
 graph TD
     User([Doctor / Admin]) --> API[FastAPI Entry Point]
-    API --> Agent[LangGraph AI Agent]
+    
+    subgraph "Native Apple Silicon Inference"
+    Agent[Clinical Agent] --> MLX[Apple MLX Server]
+    MLX --> Llama[Llama-3 8B Instruct]
+    end
     
     subgraph "Hybrid Retrieval"
     Agent --> SQL[SQL Query Tool]
@@ -99,9 +103,19 @@ Currently, the system uses **Local Embedding Models** for maximum privacy. For e
     alembic upgrade head
     PYTHONPATH=. venv/bin/python scripts/seed_data.py
     ```
-4.  **Local AI Processing:**
+4.  **Local AI Processing (Embeddings):**
     ```bash
     PYTHONPATH=. venv/bin/python scripts/generate_embeddings.py
+    ```
+5.  **Local AI Inference (Apple Silicon):**
+    Start the M5-optimized inference server in a dedicated terminal:
+    ```bash
+    source venv/bin/activate
+    python -m mlx_lm.server --model mlx-community/Meta-Llama-3-8B-Instruct-4bit
+    ```
+6.  **Run the Agent Test:**
+    ```bash
+    PYTHONPATH=. venv/bin/python scripts/test_agent.py
     ```
 
 ---
