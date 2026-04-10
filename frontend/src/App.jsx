@@ -15,9 +15,7 @@ import {
 const API_BASE = "http://localhost:8000";
 
 function App() {
-  const [messages, setMessages] = useState([
-    { role: 'ai', content: "Hello Dr. Dashboard. I am CLARA, your Clinical Assistant. How can I help you today?" }
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef(null);
@@ -86,7 +84,7 @@ function App() {
       </aside>
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col items-center">
+      <main className="flex-1 flex flex-col bg-off-white h-screen">
         <header className="w-full border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10 p-4 px-8 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Activity className="text-green-500 animate-pulse" size={18} />
@@ -101,17 +99,63 @@ function App() {
           </div>
         </header>
 
-        <div className="flex-1 w-full max-w-3xl overflow-y-auto p-4 space-y-6" ref={scrollRef}>
+        {/* Full-width scroll container */}
+        <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
+          <div className="max-w-3xl mx-auto w-full p-4 space-y-6 pb-8">
+            
+            {/* Empty State Welcome Screen */}
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center pt-32 pb-16 space-y-4 animate-fade-in">
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm text-clinical-blue">
+                  <Bot size={32} />
+                </div>
+                <h2 className="text-3xl font-bold text-dark-grey tracking-tight">How can I help you today, Dr. Parth?</h2>
+                <p className="text-gray-400 text-center max-w-md">
+                  I am CLARA, your Clinical Assistant. Run deep SQL analytics on patients, inventory, or financial data.
+                </p>
+              </div>
+            )}
+
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-clinical-blue text-white' : 'bg-white border border-gray-100 shadow-sm text-dark-grey'}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-clinical-blue text-white' : 'bg-white border border-gray-100 text-dark-grey'}`}>
                   {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                 </div>
                 <div className="space-y-2">
-                  <div className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                  </div>
+                  {msg.content && (
+                    <div className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  )}
+                  
+                  {/* Dynamic Data Table */}
+                  {msg.data && Array.isArray(msg.data) && msg.data.length > 0 && (
+                    <div className="overflow-hidden border border-gray-100 rounded-lg bg-white min-w-[300px]">
+                      <table className="min-w-full divide-y divide-gray-100 text-[11px]">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            {Object.keys(msg.data[0]).map((key) => (
+                              <th key={key} className="px-3 py-2 text-left font-bold text-gray-400 uppercase tracking-wider">
+                                {key.replace('_', ' ')}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {msg.data.slice(0, 10).map((row, rIdx) => (
+                            <tr key={rIdx} className="hover:bg-gray-50/50 transition-colors">
+                              {Object.values(row).map((val, cIdx) => (
+                                <td key={cIdx} className="px-3 py-2 text-gray-600 font-medium whitespace-nowrap">
+                                  {typeof val === 'number' && !Number.isInteger(val) ? val.toFixed(2) : val?.toString() || '-'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   
                   {/* Tool Metadata */}
                   {msg.nextStep && (
@@ -137,25 +181,27 @@ function App() {
               </div>
             </div>
           )}
+          </div>
         </div>
-
         {/* Input Bar */}
-        <div className="w-full max-w-3xl p-6 relative">
+        <div className="w-full p-6 flex flex-col items-center border-t border-gray-200/50 bg-white/50 backdrop-blur-sm self-end">
+          <div className="w-full max-w-3xl relative">
           <form onSubmit={handleSend} className="relative group">
             <input 
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Query clinical data (e.g., 'How many patients are scheduled today?')" 
-              className="w-full pl-6 pr-14 py-4 bg-white border border-gray-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-clinical-blue/20 focus:border-clinical-blue transition-all"
+              placeholder="Query clinical data..." 
+              className="w-full pl-6 pr-14 py-4 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-clinical-blue/20 focus:border-clinical-blue transition-all"
             />
             <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-dark-grey text-white rounded-xl hover:bg-gray-700 transition-colors disabled:opacity-50" disabled={isLoading}>
               <Send size={18} />
             </button>
           </form>
           <p className="text-center text-[10px] text-gray-400 mt-4">
-            CONFIDENTIAL: For authorized clinical personnel use only. System logs all interactions.
+            CONFIDENTIAL: For authorized clinical personnel use only.
           </p>
+          </div>
         </div>
       </main>
     </div>

@@ -13,9 +13,9 @@
 }
 
 .chat-bubble-user {
-  @apply bg-dark-grey text-white rounded-2xl rounded-tr-none px-4 py-2 shadow-sm;
+  @apply bg-dark-grey text-white rounded-2xl px-4 py-2;
 }
 
 .chat-bubble-ai {
-  @apply bg-white text-dark-grey border border-gray-200 rounded-2xl rounded-tl-none px-4 py-2 shadow-sm;
+  @apply bg-white text-dark-grey border border-gray-200 rounded-2xl rounded-tl-none px-4 py-2;
 }

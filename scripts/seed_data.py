@@ -23,10 +23,19 @@ NOTE_TEMPLATES = [
     "Emergency consultation. Patient reported {symptom} occurring for {duration}. Referred to {specialist}.",
 ]
 
-SYMPTOMS = ["persistent cough", "lower back pain", "severe headache", "mild fever", "dizziness", "fatigue"]
-CONDITIONS = ["hypertension", "type 2 diabetes", "seasonal allergies", "asthma", "moderate anxiety"]
-PLANS = ["prescribed antibiotics", "ordered blood tests", "recommended rest", "increased dosage of current meds"]
-STATUSES = ["improving", "stable", "worsening", "unsolved"]
+SYMPTOMS = [
+    "persistent cough", "lower back pain", "severe headache", "mild fever", "dizziness", "fatigue",
+    "shortness of breath", "nausea", "joint stiffness", "blurred vision", "chest tightness", "insomnia"
+]
+CONDITIONS = [
+    "hypertension", "type 2 diabetes", "seasonal allergies", "asthma", "moderate anxiety", "clinical depression",
+    "osteoarthritis", "anemia", "GERD", "hyperthyroidism", "chronic migraine", "tachycardia"
+]
+PLANS = [
+    "prescribed antibiotics", "ordered full blood count", "recommended rest", "increased dosage of current meds",
+    "referred to physiotherapy", "scheduled MRI scan", "prescribed anti-inflammatory", "advised smoking cessation"
+]
+STATUSES = ["improving", "stable", "worsening", "unsolved", "critical", "remission"]
 
 def clear_db():
     print("Clearing existing data...")
@@ -37,8 +46,14 @@ def clear_db():
 
 def seed_departments(db: Session):
     print("Seeding departments...")
-    depts = ["General Practice", "Cardiology", "Pediatrics", "Orthopedics", "Emergency"]
-    locations = ["Floor 1, Wing A", "Floor 2, Wing B", "Floor 1, Wing C", "Floor 3, Wing A", "Ground Floor"]
+    depts = [
+        "General Practice", "Cardiology", "Pediatrics", "Orthopedics", "Emergency",
+        "Neurology", "Radiology", "Oncology", "Endocrinology", "Dermatology"
+    ]
+    locations = [
+        "Floor 1, Wing A", "Floor 2, Wing B", "Floor 1, Wing C", "Floor 3, Wing A", "Ground Floor",
+        "Floor 4, Wing D", "Basement, Level 1", "Floor 2, Wing E", "Floor 3, Wing B", "Floor 1, Wing D"
+    ]
     
     created_depts = []
     for i in range(len(depts)):
@@ -50,7 +65,7 @@ def seed_departments(db: Session):
 
 def seed_staff(db: Session, depts):
     print("Seeding staff...")
-    roles = ["Doctor"] * 15 + ["Admin"] * 5
+    roles = ["Doctor"] * 25 + ["Nurse"] * 15 + ["Admin"] * 10 + ["Surgeon"] * 5
     created_staff = []
     for role in roles:
         dept = random.choice(depts)
@@ -154,7 +169,7 @@ def seed_clinical_data(db: Session, patients, doctors, depts, count=5000):
             lab = LabResult(
                 appointment_id=appt.id,
                 test_name=random.choice(["Full Blood Count", "Lipid Profile", "HbA1c", "Liver Function"]),
-                result_value=f"{random.uniform(1.0, 10.0):.1f}",
+                result_value=random.uniform(1.0, 10.0),
                 is_abnormal=random.choice(["No", "No", "Yes"])
             )
             db.add(lab)

@@ -1,0 +1,72 @@
+{
+  "departments": {
+    "concept": "This table represents the physical locations, wings, or medical divisions within the clinic, such as Emergency or Cardiology.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "name": "The official name of the hospital department, like Emergency or Cardiology.",
+      "location": "The physical wing or building where the department is located."
+    }
+  },
+  "staff": {
+    "concept": "This table contains all human personnel working at the clinic. Each row represents one individual employee, such as a doctor, nurse, or admin.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "first_name": "The first name of the staff member.",
+      "last_name": "The last name of the staff member.",
+      "role": "The job title or profession of the staff member, such as Doctor, Nurse, Surgeon, or Admin.",
+      "department_id": "Foreign key to departments."
+    }
+  },
+  "patients": {
+    "concept": "This table contains the records of registered individuals receiving medical care at the clinic. Each row represents one unique human being.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "first_name": "The first name of the patient.",
+      "last_name": "The last name of the patient.",
+      "nhi_number": "The National Health Index number, a unique medical identifier for the patient.",
+      "gender": "The biological sex of the patient, such as Male or Female."
+    }
+  },
+  "appointments": {
+    "concept": "This table logs all scheduled clinical sessions or meetings between a patient and a doctor. It tracks exactly when hospital visits happen and whether they were completed or cancelled.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "patient_id": "Foreign key to patients.",
+      "doctor_id": "Foreign key to staff.",
+      "department_id": "Foreign key to departments.",
+      "appointment_date": "Timezone-aware timestamp of when the visit occurs.",
+      "status": "Current state of the clinical visit, whether it is Scheduled, Completed, or Cancelled."
+    }
+  },
+  "billing": {
+    "concept": "This table securely logs all financial transactions, invoices, and payments associated with patient visits. It is used to calculate hospital revenue, unpaid debts, and track payment flow.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "appointment_id": "Foreign key to appointments.",
+      "amount": "Monetary value in dollars, use SUM for total revenue or unpaid debt.",
+      "status": "Current state of the bill, whether it is Paid or still Pending.",
+      "payment_method": "The financial instrument used by the patient to pay the bill, like Credit Card or Insurance.",
+      "invoice_date": "Date the bill was issued to the patient."
+    }
+  },
+  "medical_supplies": {
+    "concept": "This table represents the physical stock and consumable medical inventory sitting on the clinic's shelves. It is used to track item availability and calculate total product quantities.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "item_name": "The specific name of the physical product, like Nitrile Gloves or Syringes.",
+      "quantity": "The total number of physical units currently sitting in stock.",
+      "department_id": "Foreign key to departments."
+    }
+  },
+  "lab_results": {
+    "concept": "This table stores the clinical test results for patients, including blood tests, scans, and other diagnostic outputs.",
+    "columns_with_descriptions": {
+      "id": "Primary key.",
+      "appointment_id": "Foreign key to appointments.",
+      "test_name": "The name of the medical test performed, such as 'Blood Count' or 'Lipid Profile'.",
+      "result_value": "The specific numerical result of the test.",
+      "reference_range": "The normal range for this test to determine if the result is healthy.",
+      "is_abnormal": "A flat indicating if the result is outside normal ranges (e.g., 'Yes' or 'No')."
+    }
+  }
+}

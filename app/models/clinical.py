@@ -58,7 +58,7 @@ class LabResult(Base):
     appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id"), nullable=False)
     
     test_name = Column(String, nullable=False)
-    result_value = Column(String)
+    result_value = Column(Float)
     reference_range = Column(String)
     is_abnormal = Column(String) # For simple filtering
     
