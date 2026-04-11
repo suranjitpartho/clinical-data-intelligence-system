@@ -24,6 +24,14 @@ def get_llm():
             max_tokens=500,
             stop=["<|eot_id|>"]
         )
+    elif provider == "groq":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model_name, 
+            temperature=0, 
+            openai_api_key=os.getenv("GROQ_API_KEY"),
+            base_url="https://api.groq.com/openai/v1"
+        )
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("AI_API_KEY"))
