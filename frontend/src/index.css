@@ -4,6 +4,8 @@
   --color-off-white: #F9FAFB;
   --color-dark-grey: #374151;
   --color-clinical-blue: #06B6D4;
+  
+  --shadow-centered: 0 0 20px 0 rgba(0, 0, 0, 0.08);
 }
 
 @layer base {
@@ -13,9 +15,9 @@
 }
 
 .chat-bubble-user {
-  @apply bg-dark-grey text-white rounded-2xl px-4 py-2;
+  @apply bg-dark-grey text-white rounded-2xl px-5 py-3 shadow-sm;
 }
 
 .chat-bubble-ai {
-  @apply bg-white text-dark-grey border border-gray-200 rounded-2xl rounded-tl-none px-4 py-2;
+  @apply bg-white text-dark-grey border border-gray-100 rounded-2xl px-5 py-3;
 }
