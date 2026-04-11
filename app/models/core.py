@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, Table
+from sqlalchemy import Column, String, ForeignKey, Table, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -37,7 +37,7 @@ class Patient(Base):
     nhi_number = Column(String, unique=True, index=True, nullable=False) # NZ Health Identifier
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
-    date_of_birth = Column(String) # For simplicity in seeding, can use Date later
+    date_of_birth = Column(Date)
     gender = Column(String)
     email = Column(String, unique=True)
     phone = Column(String)

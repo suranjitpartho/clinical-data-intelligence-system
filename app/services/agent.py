@@ -93,9 +93,11 @@ class ClinicalAgent:
                 final_answer = llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
 
             # 3. Audit Log
+            current_tool_query = sql if tool_used == "SQL" else query
             log = AuditLog(
                 user_query=query,
                 tool_used=tool_used,
+                tool_query=current_tool_query,
                 status="Success",
                 result_summary=final_answer[:500] if final_answer else "Table Data Generated"
             )

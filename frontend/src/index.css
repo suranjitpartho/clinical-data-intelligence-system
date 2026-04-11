@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "https://fonts.bunny.net/css?family=plus-jakarta-sans:400,500,600,700|outfit:400,500,600,700";
 
 @theme {
   --color-off-white: #F9FAFB;
@@ -6,6 +7,17 @@
   --color-clinical-blue: #06B6D4;
   
   --shadow-centered: 0 0 20px 0 rgba(0, 0, 0, 0.08);
+
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  --animate-beep: beep 3s ease-in-out infinite;
+
+  @keyframes beep {
+    0%, 45%, 100% { opacity: 1; }
+    20% { opacity: 0.4; }
+    25% { opacity: 0.7; }
+  }
 }
 
 @layer base {

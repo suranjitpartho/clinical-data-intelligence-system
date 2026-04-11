@@ -57,14 +57,14 @@ function App() {
       <header className="w-full border-b border-gray-100 bg-white/80 backdrop-blur-sm z-20 p-4 px-8 flex justify-between items-center">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 pr-6 border-r border-gray-100">
-            <Stethoscope className="text-clinical-blue" size={24} />
-            <h1 className="font-medium tracking-tight text-lg">Clinical Data Intelligence System</h1>
+            <Bot className="text-clinical-blue animate-beep" size={24} />
+            <h1 className="font-display font-medium tracking-tight text-lg">Clinical Data Intelligence System</h1>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-xs text-right">
             <div className="font-bold">Suranjit Das</div>
-            <div className="text-gray-400">Lead Developer</div>
+            <div className="text-gray-400">AI Engineer</div>
           </div>
           <div className="w-8 h-8 rounded-full bg-dark-grey flex items-center justify-center text-white text-xs">SD</div>
         </div>
@@ -106,7 +106,7 @@ function App() {
               {/* Empty State Welcome Screen */}
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center pt-32 pb-16 space-y-4 animate-fade-in">
-                  <h2 className="text-3xl font-normal text-dark-grey tracking-tight">How can I help you today?</h2>
+                  <h2 className="text-3xl font-display font-normal text-dark-grey tracking-tight">How can I help you today?</h2>
                   <p className="text-gray-400 text-center max-w-md">
                     I am your Clinical AI Agent. Run deep SQL analytics on patients, inventory, or financial data.
                   </p>
@@ -187,8 +187,8 @@ function App() {
                   className="w-full pl-6 pr-14 py-4 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:border-gray-300 focus:shadow-centered transition-all duration-300 placeholder:text-gray-300"
                 />
 
-              <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-clinical-blue text-white rounded-xl hover:opacity-90 transition-all disabled:opacity-50 shadow-sm" disabled={isLoading}>
-                <Send size={18} />
+              <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-clinical-blue text-white rounded-xl hover:opacity-90 transition-all disabled:opacity-50 shadow-sm flex items-center justify-center" disabled={isLoading}>
+                <Send size={18} fill="currentColor" strokeWidth={2.5} />
               </button>
             </form>
             <p className="text-center text-[10px] text-gray-400 mt-4">

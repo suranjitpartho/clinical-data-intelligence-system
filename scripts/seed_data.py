@@ -92,7 +92,7 @@ def seed_patients(db: Session, count=500):
             nhi_number=nhi,
             first_name=fake.first_name(),
             last_name=fake.last_name(),
-            date_of_birth=fake.date_of_birth(minimum_age=1, maximum_age=95).isoformat(),
+            date_of_birth=fake.date_of_birth(minimum_age=1, maximum_age=95),
             gender=random.choice(["Male", "Female", "Other"]),
             email=fake.unique.email(),
             phone=fake.phone_number(),
