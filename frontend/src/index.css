@@ -12,24 +12,61 @@
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
 
   --animate-beep: beep 3s ease-in-out infinite;
+  --animate-fade-in-up: fade-in-up 0.5s ease-out forwards;
 
   @keyframes beep {
     0%, 45%, 100% { opacity: 1; }
     20% { opacity: 0.4; }
     25% { opacity: 0.7; }
   }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 @layer base {
   body {
-    @apply bg-off-white text-dark-grey antialiased;
+    background-color: var(--color-off-white);
+    color: var(--color-dark-grey);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
 .chat-bubble-user {
-  @apply bg-dark-grey text-white rounded-2xl px-5 py-3 shadow-sm;
+  background-color: var(--color-dark-grey);
+  color: #FFFFFF;
+  border-radius: 1rem;
+  padding: 0.75rem 1.25rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .chat-bubble-ai {
-  @apply bg-white text-dark-grey border border-gray-100 rounded-2xl px-5 py-3;
+  background-color: #FFFFFF;
+  color: var(--color-dark-grey);
+  border: 1px solid #F3F4F6;
+  border-radius: 1rem;
+  padding: 0.75rem 1.25rem;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #E5E7EB;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #D1D5DB;
 }

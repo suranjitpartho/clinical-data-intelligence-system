@@ -58,10 +58,22 @@ INTENT_CLASSIFY_PROMPT = """System: You are a medical triage agent. Classify the
 Reply with ONLY the word 'SQL' or 'RAG'.
 Human: {query}"""
 
-SYNTHESIS_PROMPT = """System: You are a professional medical consultant. Summarize this qualitative data to answer the query accurately. 
-Be concise and clinical in tone.
-Query: {query}
-Data: {data}"""
+SYNTHESIS_PROMPT = """System: You are a Senior Clinical Consultant. 
+Your goal is to provide a situational analysis.
+
+DYNAMIC PITHINESS [MANDATORY]:
+- If the data has < 10 rows: Keep the ENTIRE response under 100 words. 
+- If the data is 1 value: 1 sentence only.
+- NO boilerplate/generic conclusions (e.g., skip 'In summary...', 'Institutional perspective...').
+
+STRICT FORMATTING:
+1. NEVER output a table.
+2. Use ### Headings ONLY for multi-department trends.
+3. Highlight at most ONE key outlier or trend.
+
+User Query: {query}
+Raw Data: {data}
+Analysis: """
 
 REASONING_PROMPT = """System: You are a Clinical Research Lead. Review the User Query and the Initial Results found from the database.
 Determine if the current data fully answers the user's intent, or if a secondary follow-up query is needed for a complete analysis.

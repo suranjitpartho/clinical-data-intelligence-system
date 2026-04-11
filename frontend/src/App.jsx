@@ -14,6 +14,34 @@ import {
 
 const API_BASE = "http://localhost:8000";
 
+const renderMarkdown = (text) => {
+  if (!text) return null;
+  
+  // Split by lines to handle headers
+  const lines = text.split('\n');
+  
+  return lines.map((line, i) => {
+    // Headers: ### 
+    if (line.startsWith('###')) {
+      return <h3 key={i} className="text-clinical-blue font-bold text-lg mt-6 mb-2">{line.replace('###', '').trim()}</h3>;
+    }
+    if (line.startsWith('##')) {
+      return <h2 key={i} className="text-clinical-blue font-bold text-xl mt-8 mb-3">{line.replace('##', '').trim()}</h2>;
+    }
+    
+    // Bold: **text**
+    const parts = line.split(/(\*\*.*?\*\*)/g);
+    const renderedLine = parts.map((part, j) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={j} className="font-bold text-dark-grey">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+
+    return <p key={i} className="mb-3">{renderedLine}</p>;
+  });
+};
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -23,6 +51,7 @@ function App() {
   const [selectedProvider, setSelectedProvider] = useState("");
   const [availableModels, setAvailableModels] = useState([]);
   const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -56,6 +85,9 @@ function App() {
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     setIsLoading(true);
 
     try {
@@ -161,16 +193,24 @@ function App() {
 
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className="max-w-[85%] space-y-2">
+                <div className={`max-w-[85%] space-y-2 ${msg.role === 'ai' ? 'animate-fade-in-up' : ''}`}>
                     {msg.content && (
-                      <div className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                      <div className={msg.role === 'user' ? 'chat-bubble-user' : 'py-2 px-1'}>
+                        <div className={`prose-container max-w-none ${msg.role === 'ai' ? 'text-dark-grey' : 'text-white'}`}>
+                          {msg.role === 'ai' ? (
+                            renderMarkdown(msg.content)
+                          ) : (
+                            <p className="text-[14px] leading-[1.6] whitespace-pre-wrap font-normal">
+                              {msg.content}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
                     
                     {/* Dynamic Data Table */}
                     {msg.data && Array.isArray(msg.data) && msg.data.length > 0 && (
-                      <div className="overflow-hidden border border-gray-100 rounded-lg bg-white min-w-[300px]">
+                      <div className="overflow-x-auto w-full border border-gray-100 rounded-lg bg-white custom-scrollbar">
                         <table className="min-w-full divide-y divide-gray-100 text-[11px]">
                           <thead className="bg-gray-50">
                             <tr>
@@ -222,21 +262,36 @@ function App() {
             </div>
           </div>
           {/* Input Bar */}
-          <div className="w-full p-6 flex flex-col items-center border-t border-gray-100 bg-off-white/80 backdrop-blur-sm self-end">
+          <div className="w-full pt-6 pb-10 px-6 flex flex-col items-center border-t border-gray-100 bg-off-white/80 backdrop-blur-sm self-end">
             <div className="w-full max-w-3xl relative">
               <form onSubmit={handleSend} className="relative group">
-                <input 
-                  type="text" 
+                <textarea 
+                  ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend(e);
+                    }
+                  }}
                   placeholder="Query clinical data..." 
-                  className="w-full pl-6 pr-14 py-4 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:border-gray-300 focus:shadow-centered transition-all duration-300 placeholder:text-gray-300"
+                  rows={1}
+                  className="w-full pl-6 pr-16 pt-4 pb-14 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:border-clinical-blue/30 transition-all duration-300 placeholder:text-gray-300 resize-none max-h-64 overflow-y-hidden"
                 />
 
-              <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-clinical-blue text-white rounded-xl hover:opacity-90 transition-all disabled:opacity-50 shadow-sm flex items-center justify-center" disabled={isLoading}>
-                <Send size={18} fill="currentColor" strokeWidth={2.5} />
-              </button>
-            </form>
+                <button 
+                  type="submit"
+                  className="absolute right-3 bottom-5 p-2 bg-clinical-blue text-white rounded-md hover:brightness-90 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center shadow-sm" 
+                  disabled={isLoading || !input.trim()}
+                >
+                  <Send size={18} fill="white" />
+                </button>
+              </form>
             <p className="text-center text-[10px] text-gray-400 mt-4">
               CONFIDENTIAL: For authorized clinical personnel use only.
             </p>
