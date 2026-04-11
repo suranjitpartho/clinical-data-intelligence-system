@@ -5,7 +5,7 @@ from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.models.logs import AuditLog
-from app.services.prompts import SQL_GENERATION_PROMPT, INTENT_CLASSIFY_PROMPT, SYNTHESIS_PROMPT
+from app.services.prompts import SQL_GENERATION_PROMPT, INTENT_CLASSIFY_PROMPT, SYNTHESIS_PROMPT, DISCOVERY_PROMPT, DATA_DICTIONARY
 
 # 1. Provide-Agnostic LLM Switcher
 def get_llm():
@@ -63,8 +63,37 @@ class ClinicalAgent:
         response = llm.invoke(prompt)
         return response.content.replace("<|eot_id|>", "").strip().upper()
 
-    def generate_sql(self, query: str) -> str:
-        prompt = SQL_GENERATION_PROMPT.replace("{query}", query)
+    def discover_values(self, query: str, db) -> str:
+        """
+        Scan the DB for actual categorical values before generating the final SQL.
+        """
+        discovery_prompt = DISCOVERY_PROMPT.replace("{schema}", DATA_DICTIONARY).replace("{query}", query)
+        response = llm.invoke(discovery_prompt).content
+        
+        try:
+            json_str = response.replace("```json", "").replace("```", "").replace("<|eot_id|>", "").strip()
+            data = json.loads(json_str)
+            needed = data.get("discovery_needed", [])
+            
+            if not needed:
+                return "Standard query; no categorical discovery needed."
+            
+            context = "REAL DATABASE VALUES FOR REFERENCE:\n"
+            for item in needed:
+                table = item['table']
+                col = item['column']
+                # Basic safety check (ensure no spaces in table/col names)
+                if " " in f"{table}{col}" or ";" in f"{table}{col}": continue
+                
+                res = db.execute(text(f"SELECT DISTINCT {col} FROM {table} LIMIT 20")).fetchall()
+                values = [str(row[0]) for row in res if row[0] is not None]
+                context += f"- In table '{table}', column '{col}' contains these actual values: {values}\n"
+            return context
+        except Exception as e:
+            return f"Discovery skipped: {str(e)}"
+
+    def generate_sql(self, query: str, discovery_context: str = "") -> str:
+        prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context)
         response = llm.invoke(prompt).content
         
         # 1. Clean markdown and tokens
@@ -88,11 +117,13 @@ class ClinicalAgent:
         
         try:
             if tool_used == "SQL":
-                sql = self.generate_sql(query)
+                discovery_context = self.discover_values(query, db)
+                sql = self.generate_sql(query, discovery_context)
                 results = db.execute(text(sql)).fetchall()
                 data = [dict(row._mapping) for row in results]
                 final_answer = "" # Table mode in UI
             else:
+                discovery_context = "RAG search - no SQL discovery"
                 # Semantic Search
                 data = get_clinical_notes_semantic(db, query)
                 
@@ -101,11 +132,15 @@ class ClinicalAgent:
                 final_answer = llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
 
             # 3. Audit Log
-            current_tool_query = sql if tool_used == "SQL" else query
+            if tool_used == "SQL":
+                log_query = f"--- DISCOVERY ---\n{discovery_context}\n\n--- SQL ---\n{sql}"
+            else:
+                log_query = query
+
             log = AuditLog(
                 user_query=query,
                 tool_used=tool_used,
-                tool_query=current_tool_query,
+                tool_query=log_query,
                 status="Success",
                 result_summary=final_answer[:500] if final_answer else "Table Data Generated"
             )

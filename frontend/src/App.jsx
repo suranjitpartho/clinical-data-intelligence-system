@@ -18,6 +18,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [modelName, setModelName] = useState("Loading...");
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -25,6 +26,18 @@ function App() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/config`);
+        setModelName(response.data.model_name);
+      } catch (error) {
+        setModelName("Unknown Model");
+      }
+    };
+    fetchConfig();
+  }, []);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -91,9 +104,12 @@ function App() {
             </nav>
           </div>
 
-          <div className="p-4 border-t border-gray-50 flex flex-col gap-1">
-            <div className="text-[10px] text-gray-500 font-medium">Build v1.2.4 • Stable Release</div>
-            <div className="text-[10px] text-gray-400 italic">Meta Llama 3 8B</div>
+          <div className="p-4 border-t border-gray-50 flex flex-col gap-1 bg-gray-50/30">
+            <div className="text-[10px] text-gray-400 font-normal uppercase tracking-widest mb-1">Model</div>
+            <div className="text-[12px] text-clinical-blue font-medium tracking-tight">
+              {modelName}
+            </div>
+            <div className="text-[9px] text-gray-400 mt-2 border-t border-gray-100 pt-1">Build v1.2.4 • Stable</div>
           </div>
         </aside>
 

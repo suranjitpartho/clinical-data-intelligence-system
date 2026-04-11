@@ -1,11 +1,16 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from app.services.agent import clinical_agent
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load environment variables from .env
+load_dotenv()
+
 app = FastAPI(title="CDIS AI API")
 
-# Enable CORS so Laravel can talk to us
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,6 +20,10 @@ app.add_middleware(
 
 class QueryRequest(BaseModel):
     query: str
+
+@app.get("/config")
+async def get_config():
+    return {"model_name": os.getenv("AI_MODEL", "Unknown")}
 
 @app.post("/query")
 async def process_query(request: QueryRequest):
