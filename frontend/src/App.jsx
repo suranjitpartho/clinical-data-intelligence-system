@@ -19,6 +19,9 @@ function App() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState("Loading...");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [availableModels, setAvailableModels] = useState([]);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -30,10 +33,17 @@ function App() {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await axios.get(`${API_BASE}/config`);
-        setModelName(response.data.model_name);
+        const [configRes, modelsRes] = await Promise.all([
+          axios.get(`${API_BASE}/config`),
+          axios.get(`${API_BASE}/models`)
+        ]);
+        
+        setAvailableModels(modelsRes.data);
+        setModelName(configRes.data.model_name);
+        setSelectedModel(configRes.data.model_name);
+        setSelectedProvider(configRes.data.provider);
       } catch (error) {
-        setModelName("Unknown Model");
+        console.error("Fetch error:", error);
       }
     };
     fetchConfig();
@@ -49,7 +59,11 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE}/query`, { query: input });
+      const response = await axios.post(`${API_BASE}/query`, { 
+        query: input,
+        model: selectedModel,
+        provider: selectedProvider
+      });
       const aiResponse = { 
         role: 'ai', 
         content: response.data.final_answer,
@@ -104,12 +118,28 @@ function App() {
             </nav>
           </div>
 
-          <div className="p-4 border-t border-gray-50 flex flex-col gap-1 bg-gray-50/30">
-            <div className="text-[10px] text-gray-400 font-normal uppercase tracking-widest mb-1">Model</div>
-            <div className="text-[12px] text-clinical-blue font-medium tracking-tight">
-              {modelName}
+          <div className="p-4 border-t border-gray-50 flex flex-col gap-2 bg-gray-50/30">
+            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Inference Engine</div>
+            <select 
+              value={`${selectedProvider}:${selectedModel}`}
+              onChange={(e) => {
+                const [provider, modelId] = e.target.value.split(':');
+                setSelectedProvider(provider);
+                setSelectedModel(modelId);
+                setModelName(availableModels.find(m => m.id === modelId)?.name || modelId);
+              }}
+              className="w-full bg-transparent border border-gray-100 rounded-md py-1 px-1.5 text-[12px] text-clinical-blue font-medium focus:outline-none cursor-pointer transition-all"
+            >
+              {availableModels.map((m, idx) => (
+                <option key={idx} value={`${m.provider}:${m.id}`}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <div className="text-[9px] text-gray-400 mt-2 border-t border-gray-100 pt-1 flex justify-between items-center">
+              <span>Build v1.2.5 • Stable</span>
+              <Activity size={10} className="text-green-500" />
             </div>
-            <div className="text-[9px] text-gray-400 mt-2 border-t border-gray-100 pt-1">Build v1.2.4 • Stable</div>
           </div>
         </aside>
 

@@ -1,16 +1,17 @@
 import os
 import json
+import re
 from datetime import datetime
 from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.models.logs import AuditLog
-from app.services.prompts import SQL_GENERATION_PROMPT, INTENT_CLASSIFY_PROMPT, SYNTHESIS_PROMPT, DISCOVERY_PROMPT, DATA_DICTIONARY
+from app.services.prompts import SQL_GENERATION_PROMPT, INTENT_CLASSIFY_PROMPT, SYNTHESIS_PROMPT, DISCOVERY_PROMPT, DATA_DICTIONARY, REASONING_PROMPT
 
-# 1. Provide-Agnostic LLM Switcher
-def get_llm():
-    provider = os.getenv("AI_PROVIDER", "mlx-server").lower()
-    model_name = os.getenv("AI_MODEL", "mlx-community/Meta-Llama-3-8B-Instruct-4bit")
+# 1. Provide-Agnostic LLM Switcher (Dynamic)
+def get_llm(provider=None, model_name=None):
+    provider = (provider or os.getenv("AI_PROVIDER", "groq")).lower()
+    model_name = model_name or os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
     
     if provider == "mlx-server":
         from langchain_openai import ChatOpenAI
@@ -19,9 +20,8 @@ def get_llm():
             temperature=0, 
             api_key="not-needed",
             base_url="http://127.0.0.1:8080/v1",
-            max_retries=0,
             timeout=30,
-            max_tokens=500,
+            max_tokens=2048,
             stop=["<|eot_id|>"]
         )
     elif provider == "groq":
@@ -35,40 +35,23 @@ def get_llm():
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("AI_API_KEY"))
-    elif provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, temperature=0, anthropic_api_key=os.getenv("AI_API_KEY"))
     
-    # Fallback to MLX
+    # Default fallback
     from langchain_openai import ChatOpenAI
-    return ChatOpenAI(
-        model=model_name, 
-        temperature=0, 
-        api_key="not-needed",
-        base_url="http://127.0.0.1:8080/v1",
-        max_retries=0,
-        timeout=30,
-        max_tokens=500,
-        stop=["<|eot_id|>"]
-    )
-
-llm = get_llm()
+    return ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("AI_API_KEY"))
 
 class ClinicalAgent:
-    """
-    A robust, library-agnostic agent that orchestrates clinical intelligence.
-    """
+    def __init__(self, provider=None, model_name=None):
+        self.llm = get_llm(provider, model_name)
+
     def classify_intent(self, query: str) -> str:
         prompt = INTENT_CLASSIFY_PROMPT.format(query=query)
-        response = llm.invoke(prompt)
+        response = self.llm.invoke(prompt)
         return response.content.replace("<|eot_id|>", "").strip().upper()
 
     def discover_values(self, query: str, db) -> str:
-        """
-        Scan the DB for actual categorical values before generating the final SQL.
-        """
         discovery_prompt = DISCOVERY_PROMPT.replace("{schema}", DATA_DICTIONARY).replace("{query}", query)
-        response = llm.invoke(discovery_prompt).content
+        response = self.llm.invoke(discovery_prompt).content
         
         try:
             json_str = response.replace("```json", "").replace("```", "").replace("<|eot_id|>", "").strip()
@@ -82,7 +65,6 @@ class ClinicalAgent:
             for item in needed:
                 table = item['table']
                 col = item['column']
-                # Basic safety check (ensure no spaces in table/col names)
                 if " " in f"{table}{col}" or ";" in f"{table}{col}": continue
                 
                 res = db.execute(text(f"SELECT DISTINCT {col} FROM {table} LIMIT 20")).fetchall()
@@ -94,26 +76,21 @@ class ClinicalAgent:
 
     def generate_sql(self, query: str, discovery_context: str = "") -> str:
         prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context)
-        response = llm.invoke(prompt).content
+        response = self.llm.invoke(prompt).content
         
-        # 1. Clean markdown and tokens
-        sql = response.replace("```sql", "").replace("```", "").replace("<|eot_id|>", "").strip()
-        
-        # 2. Extract strictly from SELECT to the first semicolon
-        if "SELECT" in sql.upper():
-            start_idx = sql.upper().find("SELECT")
-            sql = sql[start_idx:]
-            if ";" in sql:
-                sql = sql[:sql.find(";") + 1]
-            
-        return sql
+        sql = response.replace("<|eot_id|>", "").strip()
+        match = re.search(r'^\s*(WITH|SELECT)\b.*?;', sql, re.DOTALL | re.IGNORECASE | re.MULTILINE)
+        if match:
+            return match.group(0).strip()
+        return sql.strip()
 
     def run_query(self, query: str) -> dict:
         intent = self.classify_intent(query)
         tool_used = "SQL" if "SQL" in intent else "RAG"
         
-        data = []
         db = SessionLocal()
+        final_data = []
+        full_log = ""
         
         try:
             if tool_used == "SQL":
@@ -121,47 +98,53 @@ class ClinicalAgent:
                 sql = self.generate_sql(query, discovery_context)
                 results = db.execute(text(sql)).fetchall()
                 data = [dict(row._mapping) for row in results]
-                final_answer = "" # Table mode in UI
-            else:
-                discovery_context = "RAG search - no SQL discovery"
-                # Semantic Search
-                data = get_clinical_notes_semantic(db, query)
+                final_data.extend(data)
+                full_log += f"--- STEP 1 DISCOVERY ---\n{discovery_context}\n\n--- STEP 1 SQL ---\n{sql}\n\n"
                 
-                # 2. Synthesize Answer (Only for RAG/Conversational)
-                synth_prompt = SYNTHESIS_PROMPT.format(query=query, data=data)
-                final_answer = llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
-
-            # 3. Audit Log
-            if tool_used == "SQL":
-                log_query = f"--- DISCOVERY ---\n{discovery_context}\n\n--- SQL ---\n{sql}"
+                if data:
+                    reason_prompt = REASONING_PROMPT.format(query=query, data=str(data)[:2000])
+                    follow_up = self.llm.invoke(reason_prompt).content.strip()
+                    if "COMPLETE" not in follow_up.upper() and len(follow_up) > 5:
+                        discovery_context_2 = self.discover_values(follow_up, db)
+                        sql_2 = self.generate_sql(follow_up, discovery_context_2)
+                        results_2 = db.execute(text(sql_2)).fetchall()
+                        data_2 = [dict(row._mapping) for row in results_2]
+                        final_data.extend(data_2)
+                        full_log += f"--- STEP 2 (Deep Dive: {follow_up}) ---\n{discovery_context_2}\n\n--- STEP 2 SQL ---\n{sql_2}"
             else:
-                log_query = query
+                final_data = get_clinical_notes_semantic(db, query)
+                full_log = f"RAG Query: {query}"
+
+            synth_prompt = SYNTHESIS_PROMPT.format(query=query, data=str(final_data)[:4000])
+            final_answer = self.llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
 
             log = AuditLog(
                 user_query=query,
                 tool_used=tool_used,
-                tool_query=log_query,
+                tool_query=full_log,
                 status="Success",
-                result_summary=final_answer[:500] if final_answer else "Table Data Generated"
+                result_summary=final_answer[:500] if final_answer else "Analysis Complete"
             )
             db.add(log)
             db.commit()
-            
+
             return {
                 "final_answer": final_answer,
                 "next_step": tool_used,
-                "data_results": data
+                "data_results": final_data
             }
-            
         except Exception as e:
+            db.rollback()
             return {"final_answer": f"Error: {str(e)}", "next_step": "Error", "data_results": []}
         finally:
             db.close()
 
-# Export a simple interface that mimics the old one
+# Dynamic Compatibility Interface
 class CompatibilityAgent:
     def invoke(self, state: dict):
-        agent = ClinicalAgent()
+        provider = state.get("provider")
+        model_name = state.get("model")
+        agent = ClinicalAgent(provider=provider, model_name=model_name)
         return agent.run_query(state["query"])
 
 clinical_agent = CompatibilityAgent()

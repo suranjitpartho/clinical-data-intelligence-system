@@ -1,0 +1,17 @@
+[
+  {
+    "id": "llama-3.3-70b-versatile",
+    "name": "Llama 3.3 70B",
+    "provider": "groq"
+  },
+  {
+    "id": "openai/gpt-oss-120b",
+    "name": "GPT-OSS 120B",
+    "provider": "groq"
+  },
+  {
+    "id": "qwen/qwen3-32b",
+    "name": "Qwen3 32B",
+    "provider": "groq"
+  }
+]
