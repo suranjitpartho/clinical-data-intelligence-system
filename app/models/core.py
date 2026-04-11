@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, Table, Date
+from sqlalchemy import Column, String, ForeignKey, Table, Date, Float, func, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -10,6 +10,7 @@ class Department(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False, unique=True)
     location = Column(String)  # e.g., "Level 2, North Wing"
+    operating_budget = Column(Float, default=0.0)
     
     # Relationships
     staff = relationship("Staff", back_populates="department")
@@ -44,5 +45,6 @@ class Patient(Base):
     address = Column(String)
     emergency_contact_name = Column(String)
     emergency_contact_phone = Column(String)
+    risk_profile = Column(Float, default=0.0) # Calculated clinical risk (0-100)
     
     appointments = relationship("Appointment", back_populates="patient")

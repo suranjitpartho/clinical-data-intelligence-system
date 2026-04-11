@@ -1,12 +1,41 @@
 import os
 import json
 import re
+import typing
+from typing import Annotated, List, Dict, Optional
+import typing_extensions
+from typing_extensions import TypedDict
+
+# Python 3.9 + Pydantic 2 Compatibility Patch
+if not hasattr(typing, "_TypedDictMeta"):
+    typing.TypedDict = TypedDict
+
 from datetime import datetime
 from sqlalchemy import text
+from langgraph.graph import StateGraph, END
+
 from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.models.logs import AuditLog
-from app.services.prompts import SQL_GENERATION_PROMPT, INTENT_CLASSIFY_PROMPT, SYNTHESIS_PROMPT, DISCOVERY_PROMPT, DATA_DICTIONARY, REASONING_PROMPT
+from app.services.prompts import (
+    SQL_GENERATION_PROMPT, 
+    INTENT_CLASSIFY_PROMPT, 
+    SYNTHESIS_PROMPT, 
+    DISCOVERY_PROMPT, 
+    DATA_DICTIONARY, 
+    REASONING_PROMPT
+)
+
+# 1. State Definition
+class AgentState(TypedDict):
+    query: str
+    tool_used: Optional[str]
+    tool_query: Optional[str]
+    data_results: List[Dict]
+    final_answer: Optional[str]
+    error_count: int
+    logs: str
+    db_session: any
 
 # 1. Provide-Agnostic LLM Switcher (Dynamic)
 def get_llm(provider=None, model_name=None):
@@ -40,102 +69,163 @@ def get_llm(provider=None, model_name=None):
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("AI_API_KEY"))
 
-class ClinicalAgent:
+class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
         self.llm = get_llm(provider, model_name)
+        self.workflow = self._create_workflow()
 
-    def classify_intent(self, query: str) -> str:
-        prompt = INTENT_CLASSIFY_PROMPT.format(query=query)
-        response = self.llm.invoke(prompt)
-        return response.content.replace("<|eot_id|>", "").strip().upper()
-
-    def discover_values(self, query: str, db) -> str:
-        discovery_prompt = DISCOVERY_PROMPT.replace("{schema}", DATA_DICTIONARY).replace("{query}", query)
-        response = self.llm.invoke(discovery_prompt).content
+    def _create_workflow(self):
+        graph = StateGraph(AgentState)
         
+        # Add Nodes
+        graph.add_node("classify", self.intent_node)
+        graph.add_node("sql_tool", self.sql_node)
+        graph.add_node("rag_tool", self.rag_node)
+        graph.add_node("synthesis", self.synthesis_node)
+        
+        # Add Edges
+        graph.set_entry_point("classify")
+        
+        graph.add_conditional_edges(
+            "classify",
+            lambda x: x["tool_used"],
+            {
+                "sql": "sql_tool",
+                "rag": "rag_tool"
+            }
+        )
+        
+        graph.add_conditional_edges(
+            "sql_tool",
+            self.should_retry_sql,
+            {
+                "retry": "sql_tool",
+                "continue": "synthesis"
+            }
+        )
+        
+        graph.add_edge("rag_tool", "synthesis")
+        graph.add_edge("synthesis", END)
+        
+        return graph.compile()
+
+    # --- NODE: Intent Classification ---
+    def intent_node(self, state: AgentState):
+        prompt = INTENT_CLASSIFY_PROMPT.format(query=state["query"])
+        response = self.llm.invoke(prompt).content.strip().lower()
+        tool = "sql" if "sql" in response else "rag"
+        return {**state, "tool_used": tool, "logs": f"--- INTENT: {tool.upper()} ---"}
+
+    # --- NODE: SQL Operations ---
+    def sql_node(self, state: AgentState):
+        query = state["query"]
+        error_count = state.get("error_count", 0)
+        
+        # --- Discovery Loop (Active Tool Execution) ---
+        discovery_prompt = DISCOVERY_PROMPT.replace("{query}", query).replace("{schema}", DATA_DICTIONARY)
+        discovery_res = self.llm.invoke(discovery_prompt).content
+        
+        discovery_context = "--- ACTUAL DATABASE CATEGORIES ---\n"
         try:
-            json_str = response.replace("```json", "").replace("```", "").replace("<|eot_id|>", "").strip()
-            data = json.loads(json_str)
-            needed = data.get("discovery_needed", [])
-            
-            if not needed:
-                return "Standard query; no categorical discovery needed."
-            
-            context = "REAL DATABASE VALUES FOR REFERENCE:\n"
-            for item in needed:
-                table = item['table']
-                col = item['column']
-                if " " in f"{table}{col}" or ";" in f"{table}{col}": continue
+            # Parse the AI's discovery plan
+            json_str = discovery_res.replace("```json", "").replace("```", "").strip()
+            plan = json.loads(json_str)
+            for item in plan.get("discovery_needed", []):
+                t, c = item['table'], item['column']
+                # Basic safety check
+                if ";" in f"{t}{c}" or " " in f"{t}{c}": continue
                 
-                res = db.execute(text(f"SELECT DISTINCT {col} FROM {table} LIMIT 20")).fetchall()
-                values = [str(row[0]) for row in res if row[0] is not None]
-                context += f"- In table '{table}', column '{col}' contains these actual values: {values}\n"
-            return context
+                # Fetch REAL values from DB
+                res = state["db_session"].execute(text(f"SELECT DISTINCT {c} FROM {t} LIMIT 15")).fetchall()
+                vals = [str(r[0]) for r in res if r[0] is not None]
+                discovery_context += f"- Table '{t}', Column '{c}': Available values are {vals}\n"
         except Exception as e:
-            return f"Discovery skipped: {str(e)}"
+            discovery_context += f"Discovery failed: {e}\n"
 
-    def generate_sql(self, query: str, discovery_context: str = "") -> str:
-        prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context)
-        response = self.llm.invoke(prompt).content
-        
-        sql = response.replace("<|eot_id|>", "").strip()
-        match = re.search(r'^\s*(WITH|SELECT)\b.*?;', sql, re.DOTALL | re.IGNORECASE | re.MULTILINE)
-        if match:
-            return match.group(0).strip()
-        return sql.strip()
+        sql_prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context)
+        sql = self.llm.invoke(sql_prompt).content.strip()
 
-    def run_query(self, query: str) -> dict:
-        intent = self.classify_intent(query)
-        tool_used = "SQL" if "SQL" in intent else "RAG"
-        
-        db = SessionLocal()
-        final_data = []
-        full_log = ""
+        # Clean SQL: Strip thoughts and markdown blocks
+        if "</thought>" in sql:
+            sql = sql.split("</thought>")[-1].strip()
+        sql = re.sub(r'```sql|```', '', sql).strip()
         
         try:
-            if tool_used == "SQL":
-                discovery_context = self.discover_values(query, db)
-                sql = self.generate_sql(query, discovery_context)
-                results = db.execute(text(sql)).fetchall()
-                data = [dict(row._mapping) for row in results]
-                final_data.extend(data)
-                full_log += f"--- STEP 1 DISCOVERY ---\n{discovery_context}\n\n--- STEP 1 SQL ---\n{sql}\n\n"
-                
-                if data:
-                    reason_prompt = REASONING_PROMPT.format(query=query, data=str(data)[:2000])
-                    follow_up = self.llm.invoke(reason_prompt).content.strip()
-                    if "COMPLETE" not in follow_up.upper() and len(follow_up) > 5:
-                        discovery_context_2 = self.discover_values(follow_up, db)
-                        sql_2 = self.generate_sql(follow_up, discovery_context_2)
-                        results_2 = db.execute(text(sql_2)).fetchall()
-                        data_2 = [dict(row._mapping) for row in results_2]
-                        final_data.extend(data_2)
-                        full_log += f"--- STEP 2 (Deep Dive: {follow_up}) ---\n{discovery_context_2}\n\n--- STEP 2 SQL ---\n{sql_2}"
-            else:
-                final_data = get_clinical_notes_semantic(db, query)
-                full_log = f"RAG Query: {query}"
+            results = state["db_session"].execute(text(sql)).fetchall()
+            data = [dict(row._mapping) for row in results]
+            return {
+                **state, 
+                "data_results": data, 
+                "tool_query": sql, 
+                "logs": state["logs"] + f"\nSQL: {sql}"
+            }
+        except Exception as e:
+            state["db_session"].rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
+            return {
+                **state, 
+                "error_count": error_count + 1, 
+                "tool_query": f"ERROR: {str(e)}\nSQL attempt: {sql}",
+                "logs": state["logs"] + f"\nERROR at attempt {error_count+1}: {str(e)}"
+            }
 
-            synth_prompt = SYNTHESIS_PROMPT.format(query=query, data=str(final_data)[:4000])
-            final_answer = self.llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
+    def should_retry_sql(self, state: AgentState):
+        if "ERROR" in (state["tool_query"] or "") and state["error_count"] < 2:
+            return "retry"
+        return "continue"
 
+    # --- NODE: RAG Operations ---
+    def rag_node(self, state: AgentState):
+        data = get_clinical_notes_semantic(state["db_session"], state["query"])
+        return {
+            **state, 
+            "data_results": data, 
+            "tool_query": "Semantic Search on Clinical Notes",
+            "logs": state["logs"] + "\n--- Semantic Search Active ---"
+        }
+
+    # --- NODE: Synthesis ---
+    def synthesis_node(self, state: AgentState):
+        synth_prompt = SYNTHESIS_PROMPT.format(
+            query=state["query"], 
+            data=str(state["data_results"])[:4000]
+        )
+        answer = self.llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
+        return {**state, "final_answer": answer}
+
+    def run_query(self, query: str):
+        db = SessionLocal()
+        try:
+            initial_state = {
+                "query": query,
+                "tool_used": None,
+                "tool_query": None,
+                "data_results": [],
+                "final_answer": None,
+                "error_count": 0,
+                "logs": "",
+                "db_session": db
+            }
+            
+            final_output = self.workflow.invoke(initial_state)
+            
+            # Persist to Audit Log
             log = AuditLog(
                 user_query=query,
-                tool_used=tool_used,
-                tool_query=full_log,
+                tool_used=final_output["tool_used"],
+                tool_query=final_output["tool_query"],
                 status="Success",
-                result_summary=final_answer[:500] if final_answer else "Analysis Complete"
+                result_summary=final_output["final_answer"][:500] if final_output["final_answer"] else "Complete"
             )
             db.add(log)
             db.commit()
-
+            
             return {
-                "final_answer": final_answer,
-                "next_step": tool_used,
-                "data_results": final_data
+                "final_answer": final_output["final_answer"],
+                "next_step": final_output["tool_used"],
+                "data_results": final_output["data_results"]
             }
         except Exception as e:
-            db.rollback()
-            return {"final_answer": f"Error: {str(e)}", "next_step": "Error", "data_results": []}
+            return {"final_answer": f"Graph Error: {str(e)}", "data_results": []}
         finally:
             db.close()
 
@@ -144,7 +234,7 @@ class CompatibilityAgent:
     def invoke(self, state: dict):
         provider = state.get("provider")
         model_name = state.get("model")
-        agent = ClinicalAgent(provider=provider, model_name=model_name)
+        agent = ClinicalGraph(provider=provider, model_name=model_name)
         return agent.run_query(state["query"])
 
 clinical_agent = CompatibilityAgent()
