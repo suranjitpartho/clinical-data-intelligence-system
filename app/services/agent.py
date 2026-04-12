@@ -45,18 +45,7 @@ def get_llm(provider=None, model_name=None):
     provider = (provider or os.getenv("AI_PROVIDER", "groq")).lower()
     model_name = model_name or os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
     
-    if provider == "mlx-server":
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=model_name, 
-            temperature=0, 
-            api_key="not-needed",
-            base_url="http://127.0.0.1:8080/v1",
-            timeout=30,
-            max_tokens=2048,
-            stop=["<|eot_id|>"]
-        )
-    elif provider == "groq":
+    if provider == "groq":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name, 
@@ -67,6 +56,20 @@ def get_llm(provider=None, model_name=None):
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("AI_API_KEY"))
+    elif provider == "github":
+        github_token = os.getenv("GITHUB_TOKEN")
+        if not github_token or github_token == "your_github_pat_here":
+            raise ValueError("GITHUB_TOKEN is missing or not set in .env")
+            
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model_name, 
+            temperature=0, 
+            api_key=github_token,
+            base_url="https://models.inference.ai.azure.com",
+            timeout=45,
+            max_retries=2
+        )
     
     # Default fallback
     from langchain_openai import ChatOpenAI
