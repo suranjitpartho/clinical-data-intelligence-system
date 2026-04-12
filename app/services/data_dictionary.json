@@ -15,6 +15,7 @@
       "first_name": "Given name of the clinician or administrator.",
       "last_name": "Surname of the personnel.",
       "role": "Professional designation. Use this to filter clinical vs. administrative queries.",
+      "specialisation": "Specific medical focus (e.g., 'Cardiologist', 'Pediatrician'). Use this for precise expertise queries.",
       "department_id": "[FK -> departments.id] Establishes the primary work-unit of the staff member."
     }
   },
@@ -24,63 +25,75 @@
       "id": "[PK] Unique clinical identifier for the patient.",
       "first_name": "Patient's given name.",
       "last_name": "Patient's surname.",
-      "date_of_birth": "Legal birth date [DATE]. Crucial for age-based clinical bucketing and pediatrics vs. geriatrics analysis.",
-      "nhi_number": "National Health Index value; the unique medical record key for this individual.",
+      "date_of_birth": "Legal birth date [DATE]. Crucial for age-based clinical bucketing and analysis.",
+      "nhi_number": "National Health Index value; the unique medical record key.",
       "gender": "Biological demographic. Used for gender-specific health screening analysis.",
-      "risk_profile": "Calculated clinical risk score (0-100) [FLOAT]. High values indicate patients requiring urgent attention or with multiple abnormalities."
+      "risk_profile": "Calculated clinical risk score (0-100) [FLOAT]. High values indicate urgent screening needs."
     }
   },
   "appointments": {
-    "concept": "Clinical encounters and utilization events. This table links patients to doctors and departments. Use this to determine hospital visit frequency and service use.",
+    "concept": "Clinical encounters and utilization events. Links patients to doctors and departments.",
     "columns_with_descriptions": {
       "id": "[PK] Unique record of the clinical encounter.",
       "patient_id": "[FK -> patients.id] Links the visit to a specific individual.",
       "doctor_id": "[FK -> staff.id] Identifies the attending practitioner.",
       "department_id": "[FK -> departments.id] Tracks which clinical unit hosted the visit.",
-      "appointment_date": "Timestamp of the clinical interaction. Used for longitudinal trend analysis (Monthly/Quarterly growth).",
-      "status": "Outcome of the scheduled visit. Use 'Completed' for reality-based revenue and clinical metrics."
+      "appointment_date": "Timestamp of the clinical interaction. Used for longitudinal trend analysis.",
+      "status": "Outcome of the scheduled visit. Use 'Completed' for reality-based metrics.",
+      "reason": "Narrative reason for the visit stated by the patient."
     }
   },
   "billing": {
-    "concept": "Financial health and revenue cycle management. Use this to calculate hospital income, outstanding liabilities (Pending), and departmental profitability.",
+    "concept": "Financial health and revenue cycle management. Use this to calculate hospital income and outstanding liabilities.",
     "columns_with_descriptions": {
       "id": "[PK] Invoice identifier.",
       "appointment_id": "[FK -> appointments.id] Links financial charges to a clinical visit.",
-      "amount": "The monetary value of the service [NUMERIC]. Sum this for revenue; compare with status for debt analysis.",
-      "status": "Payment status of the invoice.",
-      "payment_method": "Financial instrument / mode of payment used",
+      "amount": "The monetary value of the service [NUMERIC]. Sum this for revenue analysis.",
+      "status": "Payment status of the invoice ('Paid', 'Pending', 'Overdue').",
+      "payment_method": "Financial instrument used (e.g., 'Credit Card', 'Insurance').",
       "invoice_date": "Tax/Accounting date for the billing event."
     }
   },
   "medical_supplies": {
-    "concept": "Inventory and logistical management. Use this for supply-chain analysis, consumable stock monitoring, and departmental overhead tracking.",
+    "concept": "Inventory and logistical management. Use this for supply-chain analysis and overhead tracking.",
     "columns_with_descriptions": {
       "id": "[PK] Stock keeping unit (SKU) identifier.",
-      "item_name": "Clinical product name (e.g., 'Latex Gloves', 'Disinfectant').",
+      "item_name": "Clinical product name.",
       "quantity": "The current physical inventory counts.",
+      "reorder_level": "Threshold at which stock must be replenished.",
+      "supplier": "External entity providing the stock.",
       "department_id": "[FK -> departments.id] Assigns ownership and responsibility for supply stock."
     }
   },
   "lab_results": {
-    "concept": "Diagnostic output and pathology. Use this to identify clinical risks, track biometric trends, and screen for 'Abnormal' patient populations.",
+    "concept": "Pathology and diagnostic data. Use this to identify clinical risks and trends.",
     "columns_with_descriptions": {
       "id": "[PK] Unique test result record.",
-      "appointment_id": "[FK -> appointments.id] Contextualizes the test within a specific hospital visit.",
-      "test_name": "Standardized medical test nomenclature (e.g., 'Glucose', 'Cholesterol').",
-      "result_value": "The objective numerical biological metric recorded.",
-      "reference_range": "The clinical 'Normal' boundaries for context.",
-      "is_abnormal": "Categorical flag ('Yes', 'No'). Queries for 'patients at risk' should filter for 'Yes' in this column."
+      "appointment_id": "[FK -> appointments.id] Contextualizes the test within a visit.",
+      "test_name": "Medical test nomenclature (e.g., 'Glucose').",
+      "result_value": "The numerical biological metric recorded.",
+      "reference_range": "The clinical 'Normal' boundaries.",
+      "is_abnormal": "Categorical flag ('Yes', 'No')."
     }
   },
   "prescriptions": {
-    "concept": "Medication and pharmacotherapy management. Use this to track prescribed drugs, dosages, and special clinicians instructions.",
+    "concept": "Pharmacotherapy management. Use this to track prescribed drugs and dosages.",
     "columns_with_descriptions": {
       "id": "[PK] Unique prescription record.",
-      "appointment_id": "[FK -> appointments.id] Links the medication to a specific clinical visit.",
-      "medication": "Name of the drug (e.g., 'Atorvastatin', 'Amoxicillin').",
-      "dosage": "Strength and quantity (e.g., '20mg', '500mg').",
-      "frequency": "How often to take (e.g., 'Once daily', 'TID').",
-      "notes": "Clinician's specific instructions or reasoning for this prescription."
+      "appointment_id": "[FK -> appointments.id] Links medication to a visit.",
+      "medication": "Name of the drug.",
+      "dosage": "Strength and quantity.",
+      "frequency": "Administration rate (e.g., 'TID').",
+      "duration": "Length of the treatment course.",
+      "notes": "Clinician's specific instructions."
+    }
+  },
+  "clinical_notes": {
+    "concept": "Rich narrative clinical documentation. Use this to identify specific symptoms, lifestyle notes, or triage patterns via SQL joins.",
+    "columns_with_descriptions": {
+      "id": "[PK] Record identifier.",
+      "appointment_id": "[FK -> appointments.id] Links the note to a visit.",
+      "content": "The actual narrative medical note text."
     }
   }
 }

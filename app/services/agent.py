@@ -13,6 +13,7 @@ if not hasattr(typing, "_TypedDictMeta"):
 from datetime import datetime
 from sqlalchemy import text
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
@@ -23,12 +24,14 @@ from app.services.prompts import (
     SYNTHESIS_PROMPT, 
     DISCOVERY_PROMPT, 
     DATA_DICTIONARY, 
-    REASONING_PROMPT
+    REASONING_PROMPT,
+    FOLLOW_UP_REWRITE_PROMPT
 )
 
 # 1. State Definition
 class AgentState(TypedDict):
     query: str
+    messages: List[Dict] # Conversation history
     tool_used: Optional[str]
     tool_query: Optional[str]
     data_results: List[Dict]
@@ -72,19 +75,22 @@ def get_llm(provider=None, model_name=None):
 class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
         self.llm = get_llm(provider, model_name)
+        self.memory = MemorySaver()
         self.workflow = self._create_workflow()
 
     def _create_workflow(self):
         graph = StateGraph(AgentState)
         
         # Add Nodes
+        graph.add_node("rewrite", self.rewrite_node)
         graph.add_node("classify", self.intent_node)
         graph.add_node("sql_tool", self.sql_node)
         graph.add_node("rag_tool", self.rag_node)
         graph.add_node("synthesis", self.synthesis_node)
         
         # Add Edges
-        graph.set_entry_point("classify")
+        graph.set_entry_point("rewrite")
+        graph.add_edge("rewrite", "classify")
         
         graph.add_conditional_edges(
             "classify",
@@ -107,7 +113,24 @@ class ClinicalGraph:
         graph.add_edge("rag_tool", "synthesis")
         graph.add_edge("synthesis", END)
         
-        return graph.compile()
+        return graph.compile(checkpointer=self.memory)
+
+    # --- NODE: Query Rewriter (Memory Context) ---
+    def rewrite_node(self, state: AgentState):
+        history = [f"{m['role']}: {m['content']}" for m in state.get("messages", [])[-5:]]
+        if not history:
+            return {**state, "logs": "--- FIRST QUERY: NO REWRITE NEEDED ---"}
+        
+        prompt = FOLLOW_UP_REWRITE_PROMPT.format(
+            history="\n".join(history),
+            query=state["query"]
+        )
+        rewritten_query = self.llm.invoke(prompt).content.strip()
+        return {
+            **state, 
+            "query": rewritten_query, 
+            "logs": f"--- QUERY REWRITTEN: {rewritten_query} ---"
+        }
 
     # --- NODE: Intent Classification ---
     def intent_node(self, state: AgentState):
@@ -120,6 +143,7 @@ class ClinicalGraph:
     def sql_node(self, state: AgentState):
         query = state["query"]
         error_count = state.get("error_count", 0)
+        session = SessionLocal() # Open fresh session for this node
         
         # --- Discovery Loop (Active Tool Execution) ---
         discovery_prompt = DISCOVERY_PROMPT.replace("{query}", query).replace("{schema}", DATA_DICTIONARY)
@@ -136,7 +160,7 @@ class ClinicalGraph:
                 if ";" in f"{t}{c}" or " " in f"{t}{c}": continue
                 
                 # Fetch REAL values from DB
-                res = state["db_session"].execute(text(f"SELECT DISTINCT {c} FROM {t} LIMIT 15")).fetchall()
+                res = session.execute(text(f"SELECT DISTINCT {c} FROM {t} LIMIT 15")).fetchall()
                 vals = [str(r[0]) for r in res if r[0] is not None]
                 discovery_context += f"- Table '{t}', Column '{c}': Available values are {vals}\n"
         except Exception as e:
@@ -151,8 +175,9 @@ class ClinicalGraph:
         sql = re.sub(r'```sql|```', '', sql).strip()
         
         try:
-            results = state["db_session"].execute(text(sql)).fetchall()
+            results = session.execute(text(sql)).fetchall()
             data = [dict(row._mapping) for row in results]
+            session.close() # Clean up
             return {
                 **state, 
                 "data_results": data, 
@@ -160,7 +185,8 @@ class ClinicalGraph:
                 "logs": state["logs"] + f"\nSQL: {sql}"
             }
         except Exception as e:
-            state["db_session"].rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
+            session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
+            session.close()
             return {
                 **state, 
                 "error_count": error_count + 1, 
@@ -175,7 +201,9 @@ class ClinicalGraph:
 
     # --- NODE: RAG Operations ---
     def rag_node(self, state: AgentState):
-        data = get_clinical_notes_semantic(state["db_session"], state["query"])
+        session = SessionLocal()
+        data = get_clinical_notes_semantic(session, state["query"])
+        session.close()
         return {
             **state, 
             "data_results": data, 
@@ -192,21 +220,22 @@ class ClinicalGraph:
         answer = self.llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
         return {**state, "final_answer": answer}
 
-    def run_query(self, query: str):
+    def run_query(self, query: str, thread_id: str = "default", history: List[Dict] = None):
         db = SessionLocal()
         try:
+            config = {"configurable": {"thread_id": thread_id}}
             initial_state = {
                 "query": query,
+                "messages": history or [],
                 "tool_used": None,
                 "tool_query": None,
                 "data_results": [],
                 "final_answer": None,
                 "error_count": 0,
-                "logs": "",
-                "db_session": db
+                "logs": ""
             }
             
-            final_output = self.workflow.invoke(initial_state)
+            final_output = self.workflow.invoke(initial_state, config=config)
             
             # Persist to Audit Log
             log = AuditLog(
@@ -219,10 +248,17 @@ class ClinicalGraph:
             db.add(log)
             db.commit()
             
+            # Update history for the return
+            new_messages = (history or []) + [
+                {"role": "user", "content": query},
+                {"role": "assistant", "content": final_output["final_answer"]}
+            ]
+            
             return {
                 "final_answer": final_output["final_answer"],
                 "next_step": final_output["tool_used"],
-                "data_results": final_output["data_results"]
+                "data_results": final_output["data_results"],
+                "history": new_messages
             }
         except Exception as e:
             return {"final_answer": f"Graph Error: {str(e)}", "data_results": []}
@@ -234,7 +270,10 @@ class CompatibilityAgent:
     def invoke(self, state: dict):
         provider = state.get("provider")
         model_name = state.get("model")
+        thread_id = state.get("thread_id", "default_session")
+        history = state.get("history", [])
+        
         agent = ClinicalGraph(provider=provider, model_name=model_name)
-        return agent.run_query(state["query"])
+        return agent.run_query(state["query"], thread_id=thread_id, history=history)
 
 clinical_agent = CompatibilityAgent()

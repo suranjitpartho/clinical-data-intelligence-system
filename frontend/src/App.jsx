@@ -44,6 +44,8 @@ const renderMarkdown = (text) => {
 
 function App() {
   const [messages, setMessages] = useState([]);
+  const [history, setHistory] = useState([]); // Internal state for AI context
+  const [threadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState("Loading...");
@@ -84,7 +86,11 @@ function App() {
 
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
+    
+    // We don't clear the input inside the state yet to prevent UI lag
+    const originalInput = input;
     setInput("");
+    
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -92,17 +98,25 @@ function App() {
 
     try {
       const response = await axios.post(`${API_BASE}/query`, { 
-        query: input,
+        query: originalInput,
         model: selectedModel,
-        provider: selectedProvider
+        provider: selectedProvider,
+        thread_id: threadId,
+        history: history // Send the breadcrumbs of the conversation
       });
+      
       const aiResponse = { 
         role: 'ai', 
         content: response.data.final_answer,
         data: response.data.data_results,
         nextStep: response.data.next_step
       };
+      
       setMessages(prev => [...prev, aiResponse]);
+      // Sync our internal history with the server's version
+      if (response.data.history) {
+        setHistory(response.data.history);
+      }
     } catch (error) {
       setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not connect to the Clinical Intelligence backend." }]);
     } finally {

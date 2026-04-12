@@ -23,6 +23,8 @@ class QueryRequest(BaseModel):
     query: str
     model: str = None
     provider: str = None
+    thread_id: str = "default_session"
+    history: list = []
 
 @app.get("/models")
 async def get_models():
@@ -47,7 +49,9 @@ async def process_query(request: QueryRequest):
         result = clinical_agent.invoke({
             "query": request.query,
             "model": request.model,
-            "provider": request.provider
+            "provider": request.provider,
+            "thread_id": request.thread_id,
+            "history": request.history
         })
         return result
     except Exception as e:
