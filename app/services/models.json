@@ -1,0 +1,22 @@
+[
+  {
+    "id": "llama-3.3-70b-versatile",
+    "name": "Llama 3.3 70B (Groq)",
+    "provider": "groq"
+  },
+  {
+    "id": "openai/gpt-oss-120b",
+    "name": "GPT-OSS 120B (Groq)",
+    "provider": "groq"
+  },
+  {
+    "id": "gpt-4o",
+    "name": "GPT-4o (GitHub)",
+    "provider": "github"
+  },
+  {
+    "id": "Llama-3.3-70B-Instruct",
+    "name": "Llama 3.3 70B (GitHub)",
+    "provider": "github"
+  }
+]
