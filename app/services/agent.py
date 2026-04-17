@@ -129,10 +129,20 @@ class ClinicalGraph:
             query=state["query"]
         )
         rewritten_query = self.llm.invoke(prompt).content.strip()
+        
+        # Clean prefix if LLM hallucinates it
+        if "REWRITTEN STANDALONE QUERY:" in rewritten_query.upper():
+            rewritten_query = rewritten_query.split(":", 1)[-1].strip()
+            
+        logs_msg = f"--- QUERY REWRITTEN: {rewritten_query} ---"
+        if rewritten_query.lower() == state["query"].lower():
+            logs_msg = "--- NEW TOPIC DETECTED: QUERY NOT REWRITTEN ---"
+            
+        print(f"\n[AGENT] {logs_msg}")
         return {
             **state, 
             "query": rewritten_query, 
-            "logs": f"--- QUERY REWRITTEN: {rewritten_query} ---"
+            "logs": logs_msg
         }
 
     # --- NODE: Intent Classification ---
@@ -140,6 +150,7 @@ class ClinicalGraph:
         prompt = INTENT_CLASSIFY_PROMPT.format(query=state["query"])
         response = self.llm.invoke(prompt).content.strip().lower()
         tool = "sql" if "sql" in response else "rag"
+        print(f"[AGENT] INTENT: {tool.upper()}")
         return {**state, "tool_used": tool, "logs": f"--- INTENT: {tool.upper()} ---"}
 
     # --- NODE: SQL Operations ---
@@ -148,6 +159,12 @@ class ClinicalGraph:
         error_count = state.get("error_count", 0)
         session = SessionLocal() # Open fresh session for this node
         
+        # --- Error Context Injection (Self-Correction) ---
+        error_context = ""
+        if error_count > 0 and state.get("tool_query") and "ERROR" in state["tool_query"]:
+            previous_error = state["tool_query"]
+            error_context = f"\n[PREVIOUS EXECUTION ERROR]:\nYou previously ran a query that resulted in this error. DO NOT make the same mistake. Fix the SQL syntax or logic based on this error message:\n{previous_error}\n"
+
         # --- Discovery Loop (Active Tool Execution) ---
         discovery_prompt = DISCOVERY_PROMPT.replace("{query}", query).replace("{schema}", DATA_DICTIONARY)
         discovery_res = self.llm.invoke(discovery_prompt).content
@@ -168,11 +185,18 @@ class ClinicalGraph:
                 discovery_context += f"- Table '{t}', Column '{c}': Available values are {vals}\n"
         except Exception as e:
             discovery_context += f"Discovery failed: {e}\n"
+        
+        # We keep discovery_context for internal prompt use only, not for user logs
+        sql_prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context).replace("{error_context}", error_context)
+        response_content = self.llm.invoke(sql_prompt).content.strip()
 
-        sql_prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context)
-        sql = self.llm.invoke(sql_prompt).content.strip()
-
+        # Extract reasoning thought block
+        thought_block = ""
+        if "<thought>" in response_content and "</thought>" in response_content:
+            thought_block = response_content.split("<thought>")[1].split("</thought>")[0].strip()
+        
         # Clean SQL: Strip thoughts and markdown blocks
+        sql = response_content
         if "</thought>" in sql:
             sql = sql.split("</thought>")[-1].strip()
         sql = re.sub(r'```sql|```', '', sql).strip()
@@ -181,20 +205,26 @@ class ClinicalGraph:
             results = session.execute(text(sql)).fetchall()
             data = [dict(row._mapping) for row in results]
             session.close() # Clean up
+            
+            # THE TRUE REASONING TRACE: Only show original reasoning to the user
+            final_trace = thought_block if thought_block else "Analyzing database for clinical patterns..."
+            
+            print(f"[AGENT] SQL SUCCESS: Found {len(data)} results.")
             return {
                 **state, 
                 "data_results": data, 
                 "tool_query": sql, 
-                "logs": state["logs"] + f"\nSQL: {sql}"
+                "logs": final_trace
             }
         except Exception as e:
             session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
             session.close()
+            print(f"[AGENT] SQL ERROR: {str(e)[:100]}...")
             return {
                 **state, 
                 "error_count": error_count + 1, 
                 "tool_query": f"ERROR: {str(e)}\nSQL attempt: {sql}",
-                "logs": state["logs"] + f"\nERROR at attempt {error_count+1}: {str(e)}"
+                "logs": state.get("logs", "") + f"\nERROR at attempt {error_count+1}: {str(e)}"
             }
 
     def should_retry_sql(self, state: AgentState):
@@ -207,6 +237,7 @@ class ClinicalGraph:
         session = SessionLocal()
         data = get_clinical_notes_semantic(session, state["query"])
         session.close()
+        print(f"[AGENT] RAG SUCCESS: Found {len(data)} results.")
         return {
             **state, 
             "data_results": data, 
@@ -221,6 +252,7 @@ class ClinicalGraph:
             data=str(state["data_results"])[:4000]
         )
         answer = self.llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
+        print(f"[AGENT] RESPONSE READY.")
         return {**state, "final_answer": answer}
 
     def run_query(self, query: str, thread_id: str = "default", history: List[Dict] = None):
@@ -261,6 +293,7 @@ class ClinicalGraph:
                 "final_answer": final_output["final_answer"],
                 "next_step": final_output["tool_used"],
                 "data_results": final_output["data_results"],
+                "logs": final_output["logs"],
                 "history": new_messages
             }
         except Exception as e:

@@ -6,6 +6,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import MessageList from './components/Chat/MessageList';
 import ChatInput from './components/Chat/ChatInput';
+import TraceSidebar from './components/TraceSidebar';
 
 const API_BASE = "http://localhost:8000";
 
@@ -19,6 +20,8 @@ function App() {
   const [selectedModel, setSelectedModel] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("");
   const [availableModels, setAvailableModels] = useState([]);
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
+  const [traceLogs, setTraceLogs] = useState("");
   
   const scrollRef = useRef(null);
 
@@ -72,7 +75,8 @@ function App() {
         role: 'ai', 
         content: response.data.final_answer,
         data: response.data.data_results,
-        nextStep: response.data.next_step
+        nextStep: response.data.next_step,
+        logs: response.data.logs
       };
       
       setMessages(prev => [...prev, aiResponse]);
@@ -106,6 +110,8 @@ function App() {
             messages={messages} 
             isLoading={isLoading} 
             scrollRef={scrollRef} 
+            setIsTraceOpen={setIsTraceOpen}
+            setTraceLogs={setTraceLogs}
           />
           
           <ChatInput 
@@ -115,6 +121,12 @@ function App() {
             isLoading={isLoading}
           />
         </main>
+
+        <TraceSidebar 
+          isOpen={isTraceOpen} 
+          setIsOpen={setIsTraceOpen} 
+          logs={traceLogs} 
+        />
       </div>
     </div>
   );

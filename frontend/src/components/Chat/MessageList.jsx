@@ -1,9 +1,9 @@
 import React from 'react';
-import { Database, Search } from 'lucide-react';
+import { Database, Search, Brain } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
 
-const MessageList = ({ messages, isLoading, scrollRef }) => {
+const MessageList = ({ messages, isLoading, scrollRef, setIsTraceOpen, setTraceLogs }) => {
   return (
     <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
       <div className="max-w-3xl mx-auto w-full p-4 space-y-6 pb-8">
@@ -39,9 +39,26 @@ const MessageList = ({ messages, isLoading, scrollRef }) => {
               
               {/* Tool Metadata */}
               {msg.nextStep && (
-                <div className="flex items-center gap-2 px-1 text-gray-400">
-                  {msg.nextStep === 'SQL' ? <Database size={12} className="text-blue-500" /> : <Search size={12} className="text-orange-500" />}
-                  <span className="text-[10px] font-bold">Tool: {msg.nextStep} engine</span>
+                <div className="flex items-center flex-wrap gap-2 px-1">
+                  <div className="flex items-center gap-1.5 text-gray-400">
+                    {msg.nextStep === 'SQL' ? <Database size={12} className="text-blue-500" /> : <Search size={12} className="text-orange-500" />}
+                    <span className="text-[10px] font-bold tracking-tight uppercase">Decision: {msg.nextStep} engine</span>
+                  </div>
+                  
+                  {msg.logs && (
+                    <button 
+                      onClick={() => {
+                        setTraceLogs(msg.logs);
+                        setIsTraceOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full hover:bg-gray-100/70 transition-colors cursor-pointer group"
+                    >
+                      <Brain size={10} className="text-gray-400 group-hover:text-dark-grey" />
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter group-hover:text-dark-grey">
+                        Reasoning Trace
+                      </span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
