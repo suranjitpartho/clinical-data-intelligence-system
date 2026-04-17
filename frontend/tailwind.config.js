@@ -12,7 +12,7 @@ export default {
         'clinical-blue': '#06B6D4',
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+        sans: ['"Inter"', 'sans-serif'],
         display: ['Outfit', 'sans-serif'],
       },
       boxShadow: {

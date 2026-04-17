@@ -18,10 +18,5 @@
     "id": "Llama-3.3-70B-Instruct",
     "name": "Llama 3.3 70B (GitHub)",
     "provider": "github"
-  },
-  {
-    "id": "DeepSeek-R1-0528",
-    "name": "DeepSeek R1 (GitHub)",
-    "provider": "github"
   }
 ]
