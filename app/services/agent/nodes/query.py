@@ -29,7 +29,13 @@ def rewrite_node(state: AgentState, llm):
 
 def intent_node(state: AgentState, llm):
     prompt = INTENT_CLASSIFY_PROMPT.format(query=state["query"])
-    response = llm.invoke(prompt).content.strip().lower()
-    tool = "sql" if "sql" in response else "rag"
-    print(f"[AGENT] INTENT: {tool.upper()}")
-    return {**state, "tool_used": tool, "logs": f"--- INTENT: {tool.upper()} ---"}
+    response = llm.invoke(prompt).content.strip().upper()
+    
+    # Parse potential multiple tools (e.g., "SQL,RAG")
+    tools = [t.strip().lower() for t in response.split(",")]
+    # Normalize "BOTH" if LLM returns it
+    if "BOTH" in response:
+        tools = ["sql", "rag"]
+        
+    print(f"[AGENT] INTENTS: {tools}")
+    return {**state, "tools_needed": tools, "logs": f"--- INTENTS: {', '.join(tools).upper()} ---"}

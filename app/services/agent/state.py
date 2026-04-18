@@ -9,9 +9,10 @@ if not hasattr(typing, "_TypedDictMeta"):
 class AgentState(TypedDict):
     query: str
     messages: List[Dict] # Conversation history
-    tool_used: Optional[str]
+    tools_needed: List[str]
     tool_query: Optional[str]
     data_results: List[Dict]
+    medical_context: List[str] # For RAG snippets
     final_answer: Optional[str]
     error_count: int
     logs: str

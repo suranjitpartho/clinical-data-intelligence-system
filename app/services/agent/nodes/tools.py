@@ -87,10 +87,14 @@ def rag_node(state: AgentState):
     session = SessionLocal()
     data = get_clinical_notes_semantic(session, state["query"])
     session.close()
+    
+    # Store unstructured text in medical_context
+    context = [f"Record: {d['content']}" for d in data]
+    
     print(f"[AGENT] RAG SUCCESS: Found {len(data)} results.")
     return {
         **state, 
-        "data_results": data, 
+        "medical_context": context, 
         "tool_query": "Semantic Search on Clinical Notes",
         "logs": state.get("logs", "") + "\n--- Semantic Search Active ---"
     }

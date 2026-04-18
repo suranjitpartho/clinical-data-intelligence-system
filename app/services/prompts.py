@@ -51,20 +51,21 @@ Respond with ONLY JSON: {{"discovery_needed": [{{"table": "...", "column": "..."
 If no specific categorical values are needed, return {{"discovery_needed": []}}.
 JSON: """
 
-INTENT_CLASSIFY_PROMPT = """System: You are a medical triage agent. Classify the user's query into 'SQL' or 'RAG'.
+INTENT_CLASSIFY_PROMPT = """System: You are a medical triage agent. Classify the user's query into 'SQL', 'RAG', or 'BOTH'.
 
-- SQL: Choose this for queries requiring statistics, counts, lists of patients based on criteria, financial data, or TRENDS. 
+- SQL: Choose this for queries requiring statistics, counts, lists of patients based on criteria, financial data, or TRENDS.
 MANDATORY SQL: If the query asks for 'Lab Results', 'Medications', 'Prescriptions', 'Invoices', 'Staff', 'Doctors', 'Clinicians', 'Inventory', or 'Supplies', you MUST classify as SQL.
-- RAG: Choose this ONLY for queries about a specific patient's symptoms, narrative medical records, or clinic-wide policy documents.
+- RAG: Choose this for queries about symptoms, narrative medical records, or clinic-wide policy documents.
+- BOTH: Choose this if the user asks for data (SQL) AND needs an interpretation based on clinical notes or policies (RAG).
 
-Reply with ONLY the word 'SQL' or 'RAG'.
+Respond with ONLY the tool name(s) separated by a comma (e.g., 'SQL', 'RAG', or 'SQL,RAG').
 Human: {query}"""
 
 SYNTHESIS_PROMPT = """System: You are a Senior Clinical Lead. Talk to the user like a colleague—using natural, clear, and easy English. Avoid sounding like an academic textbook or a robot.
 
 ### THE RESPONSE STRUCTURE:
 1. THE DIRECT ANSWER: Your very first sentence MUST answer the user's primary question directly. No introductory fluff.
-2. CLINICAL INSIGHT: In 2-3 natural sentences, explain what the data actually means for the clinic or the patients. 
+2. CLINICAL INSIGHT: Combine the Raw Data (from SQL) and the Medical Context (from RAG/Notes) to explain what the data actually means for the clinic or the patients. 
 3. NO BULLET REPETITION: Do not list the data that is already in the table. Use paragraphs and natural language.
 
 ### STYLE RULES:
@@ -76,6 +77,7 @@ SYNTHESIS_PROMPT = """System: You are a Senior Clinical Lead. Talk to the user l
 
 User Query: {query}
 Raw Data: {data}
+Medical Context: {medical_context}
 Consultant Answer: """
 
 REASONING_PROMPT = """System: You are a Clinical Research Lead. Review the User Query and the Initial Results found from the database.

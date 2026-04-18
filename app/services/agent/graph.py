@@ -19,6 +19,21 @@ class ClinicalGraph:
         self.memory = MemorySaver()
         self.workflow = self._create_workflow()
 
+    def route_from_classify(self, state: AgentState):
+        tools = state.get("tools_needed", [])
+        if "sql" in tools:
+            return "sql"
+        if "rag" in tools:
+            return "rag"
+        return "synthesis"
+
+    def route_from_sql(self, state: AgentState):
+        if "ERROR" in (state.get("tool_query") or "") and state.get("error_count", 0) < 2:
+            return "retry"
+        if "rag" in state.get("tools_needed", []):
+            return "rag"
+        return "continue"
+
     def _create_workflow(self):
         graph = StateGraph(AgentState)
         
@@ -35,18 +50,20 @@ class ClinicalGraph:
         
         graph.add_conditional_edges(
             "classify",
-            lambda x: x["tool_used"],
+            self.route_from_classify,
             {
                 "sql": "sql_tool",
-                "rag": "rag_tool"
+                "rag": "rag_tool",
+                "synthesis": "synthesis"
             }
         )
         
         graph.add_conditional_edges(
             "sql_tool",
-            should_retry_sql,
+            self.route_from_sql,
             {
                 "retry": "sql_tool",
+                "rag": "rag_tool",
                 "continue": "synthesis"
             }
         )
@@ -63,9 +80,10 @@ class ClinicalGraph:
             initial_state = {
                 "query": query,
                 "messages": history or [],
-                "tool_used": None,
+                "tools_needed": [],
                 "tool_query": None,
                 "data_results": [],
+                "medical_context": [],
                 "final_answer": None,
                 "error_count": 0,
                 "logs": ""
@@ -76,8 +94,8 @@ class ClinicalGraph:
             # Persist to Audit Log
             log = AuditLog(
                 user_query=query,
-                tool_used=final_output["tool_used"],
-                tool_query=final_output["tool_query"],
+                tool_used=", ".join(final_output.get("tools_needed", [])),
+                tool_query=final_output.get("tool_query"),
                 status="Success",
                 result_summary=final_output["final_answer"][:500] if final_output["final_answer"] else "Complete"
             )
@@ -92,8 +110,9 @@ class ClinicalGraph:
             
             return {
                 "final_answer": final_output["final_answer"],
-                "next_step": final_output["tool_used"],
+                "next_step": ", ".join(final_output.get("tools_needed", [])),
                 "data_results": final_output["data_results"],
+                "medical_context": final_output.get("medical_context", []),
                 "logs": final_output["logs"],
                 "history": new_messages
             }
