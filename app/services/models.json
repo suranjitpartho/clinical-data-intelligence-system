@@ -18,5 +18,10 @@
     "id": "Llama-3.3-70B-Instruct",
     "name": "Llama 3.3 70B (GitHub)",
     "provider": "github"
+  },
+  {
+    "id": "grok-3",
+    "name": "Grok 3 (GitHub)",
+    "provider": "github"
   }
 ]

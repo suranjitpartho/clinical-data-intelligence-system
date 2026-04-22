@@ -25,6 +25,7 @@ class Staff(Base):
     role = Column(String, nullable=False)  # e.g., "Doctor", "Admin", "Nurse"
     specialisation = Column(String)
     email = Column(String, unique=True, index=True)
+    salary = Column(Float, default=0.0)
     
     department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"))
     department = relationship("Department", back_populates="staff")

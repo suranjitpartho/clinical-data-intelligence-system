@@ -34,7 +34,7 @@ const ChatInput = ({ input, setInput, handleSend, isLoading }) => {
             }}
             placeholder="Query clinical data..." 
             rows={1}
-            className="w-full pl-6 pr-16 pt-4 pb-14 bg-white border border-gray-100 rounded-2xl focus:outline-none focus:shadow-[0_12px_20px_-5px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] focus:-translate-y-0.5 transition-all duration-300 placeholder:text-gray-300 resize-none max-h-64 overflow-y-hidden"
+            className="w-full pl-6 pr-16 pt-4 pb-14 bg-white border border-gray-100 rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_4px_6px_-2px_rgba(0,0,0,0.05)] focus:outline-none focus:shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] focus:-translate-y-0.5 transition-all duration-300 placeholder:text-gray-300 resize-none max-h-64 overflow-y-hidden"
           />
 
           <button 

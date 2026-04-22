@@ -26,6 +26,7 @@ class MedicalSupply(Base):
     item_name = Column(String, nullable=False)
     quantity = Column(Integer, default=0)
     reorder_level = Column(Integer, default=10)
+    unit_cost = Column(Float, default=0.0)
     supplier = Column(String)
     
     department = relationship("Department", back_populates="supplies")

@@ -1,6 +1,6 @@
 from app.db.base import Base
 from .core import Department, Staff, Patient
-from .clinical import Appointment, ClinicalNote, Prescription, LabResult
+from .clinical import Appointment, ClinicalNote, Prescription, LabResult, Diagnosis, ClinicalGuideline
 from .business import Billing, MedicalSupply
 from .logs import AuditLog
 
@@ -14,6 +14,8 @@ __all__ = [
     "ClinicalNote",
     "Prescription",
     "LabResult",
+    "Diagnosis",
+    "ClinicalGuideline",
     "Billing",
     "MedicalSupply",
     "AuditLog"
