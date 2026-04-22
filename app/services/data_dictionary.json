@@ -1,99 +1,120 @@
 {
   "departments": {
-    "concept": "Organizational units of the clinic. Use this for macro-level analysis of hospital operations, patient flow by wing, and departmental workload distribution.",
+    "concept": "Organizational units of the clinic. Each department is a unique clinical division (e.g., Cardiology, Pediatrics). Financial Analysis: This is the primary level for Profit & Loss (P&L) reporting. Profit is calculated by taking departmental Billing (Revenue) and subtracting Staff Salaries and Supply Costs. Use this for macro-level analysis of hospital operations and patient flow by wing.",
     "columns_with_descriptions": {
       "id": "[PK] Unique identifier for the department.",
-      "name": "Clinical division name. USE THIS for categorical business grouping.",
+      "name": "Clinical division name (e.g., 'Cardiology', 'General Medicine'). Use this for categorical business grouping and filtering.",
       "location": "Geographic location of the department within the hospital facility.",
-      "operating_budget": "Annual financial allocation [FLOAT]. Use this for ROI and cost-efficiency analysis."
+      "operating_budget": "Annual financial allocation [FLOAT]. Represents the total yearly budget for the department. Use this for ROI and cost-efficiency analysis."
     }
   },
   "staff": {
-    "concept": "Hospital human resources. Use this to analyze practitioner performance, track doctor-patient ratios, and resource allocation across departments.",
+    "concept": "Hospital human resources. Contains both clinical staff (doctors) and administrative personnel. Financial Role: Staff salaries represent the clinic's largest fixed operating expense. When calculating departmental costs or profitability, sum these salaries for that department_id. Note: The 'role' column distinguishes them — use it to filter when the query is specifically about doctors or clinical practitioners. A staff member can be linked to a department both as a regular member (via department_id) and as its head doctor (via departments.head_doctor_id); avoid double-counting when joining both paths.",
     "columns_with_descriptions": {
       "id": "[PK] Unique staff ID.",
       "first_name": "Given name of the clinician or administrator.",
       "last_name": "Surname of the personnel.",
-      "role": "Professional designation. Use this to filter clinical vs. administrative queries.",
-      "specialisation": "Specific medical focus (e.g., 'Cardiologist', 'Pediatrician'). Use this for precise expertise queries.",
-      "department_id": "[FK -> departments.id] Establishes the primary work-unit of the staff member."
+      "role": "Professional designation. Values include 'Doctor' and 'Nurse'. Always filter by role when the query distinguishes clinical from nursing staff.",
+      "specialisation": "Specific medical focus (e.g., 'Cardiologist', 'Pediatrician'). Only populated for doctors. Use this for precise expertise queries.",
+      "department_id": "[FK -> departments.id] Establishes the primary work-unit of the staff member.",
+      "salary": "Annual gross salary [FLOAT]. Represents the single largest departmental expense. Use this to calculate personnel costs."
     }
   },
   "patients": {
-    "concept": "Central clinical registry. This is the root table for all patient-centric metrics, demographics, and longitudinal health tracking.",
+    "concept": "Central clinical registry. This is the root table for all patient-centric metrics, demographics, and longitudinal health tracking. Each patient has exactly one record here. Note: date_of_birth is stored as a DATE type — to calculate a patient's current age in years, use EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.date_of_birth)); do not subtract raw dates as this returns an interval in seconds.",
     "columns_with_descriptions": {
       "id": "[PK] Unique clinical identifier for the patient.",
       "first_name": "Patient's given name.",
       "last_name": "Patient's surname.",
-      "date_of_birth": "Legal birth date [DATE]. Crucial for age-based clinical bucketing and analysis.",
-      "nhi_number": "National Health Index value; the unique medical record key.",
-      "gender": "Biological demographic. Used for gender-specific health screening analysis.",
-      "risk_profile": "Calculated clinical risk score (0-100) [FLOAT]. High values indicate urgent screening needs."
+      "date_of_birth": "Legal birth date [DATE]. To compute age in years: EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.date_of_birth)).",
+      "nhi_number": "National Health Index number — the unique medical record key used by NZ Health.",
+      "gender": "Patient's gender identity. Used for gender-specific health screening and demographic analysis.",
+      "risk_profile": "Calculated clinical risk score ranging from 0 to 100 [FLOAT]. Higher values indicate greater vulnerability and urgency for care. Use ORDER BY DESC to find the most at-risk patients."
     }
   },
   "appointments": {
-    "concept": "Clinical encounters and utilization events. Links patients to doctors and departments.",
+    "concept": "Clinical encounters and scheduling events. Each appointment links a patient to a specific doctor and department at a point in time. Note: Not all appointments represent completed clinical interactions — the status field indicates the outcome. For any metric representing real clinical activity (actual visits, revenue generation, note creation), filter to status = 'Completed' only. Cancelled and No-show appointments do not have associated billing, prescriptions, or lab results.",
     "columns_with_descriptions": {
       "id": "[PK] Unique record of the clinical encounter.",
       "patient_id": "[FK -> patients.id] Links the visit to a specific individual.",
-      "doctor_id": "[FK -> staff.id] Identifies the attending practitioner.",
+      "doctor_id": "[FK -> staff.id] Identifies the attending practitioner. Always join to staff with role='Doctor' for clinical queries.",
       "department_id": "[FK -> departments.id] Tracks which clinical unit hosted the visit.",
-      "appointment_date": "Timestamp of the clinical interaction. Used for longitudinal trend analysis.",
-      "status": "Outcome of the scheduled visit. Use 'Completed' for reality-based metrics.",
-      "reason": "Narrative reason for the visit stated by the patient."
+      "appointment_date": "Timestamp of the clinical interaction [TIMESTAMP]. Cast to DATE for day-level filtering. Use this for longitudinal and time-series trend analysis.",
+      "status": "Outcome of the scheduled visit. Known values: 'Completed', 'Cancelled', 'No-show'. Only 'Completed' appointments have downstream records (billing, notes, lab results, prescriptions).",
+      "reason": "Free-text reason for the visit as stated by the patient at booking."
     }
   },
   "billing": {
-    "concept": "Financial health and revenue cycle management. Use this to calculate hospital income and outstanding liabilities.",
+    "concept": "Financial health and revenue cycle management. Each billing record is a one-to-one invoice for a single appointment. Financial Role: This is the primary revenue source for the clinic. Total income (or Profit) is the SUM(amount) where status='Paid'. To calculate departmental revenue, join billing to appointments to departments.",
     "columns_with_descriptions": {
       "id": "[PK] Invoice identifier.",
-      "appointment_id": "[FK -> appointments.id] Links financial charges to a clinical visit.",
-      "amount": "The monetary value of the service [NUMERIC]. Sum this for revenue analysis.",
-      "status": "Payment status of the invoice ('Paid', 'Pending', 'Overdue').",
-      "payment_method": "Financial instrument used (e.g., 'Credit Card', 'Insurance').",
-      "invoice_date": "Tax/Accounting date for the billing event."
+      "appointment_id": "[FK -> appointments.id] Links the financial charge to a single clinical visit. One appointment = one invoice.",
+      "amount": "The billed monetary value of the service [NUMERIC]. SUM this column for financial analysis. Filter by status='Paid' for actual collected revenue.",
+      "status": "Payment status of the invoice. Known values: 'Paid', 'Pending'. Pending represents outstanding liabilities not yet collected.",
+      "payment_method": "Financial instrument used (e.g., 'Credit Card', 'Insurance', 'Cash'). Use this to analyse payment channel distribution.",
+      "invoice_date": "The date the invoice was issued [DATE]. Use for accounting period analysis."
     }
   },
   "medical_supplies": {
-    "concept": "Inventory and logistical management. Use this for supply-chain analysis and overhead tracking.",
+    "concept": "Inventory and logistical management. Note: A single item_name can have multiple rows because inventory is distributed across different department_ids — each department manages its own stock of a given item. Total facility-wide stock for an item is the combined sum of all its department-level rows. To find which item has the highest or lowest total stock across the clinic, aggregate the quantities by item_name.",
     "columns_with_descriptions": {
       "id": "[PK] Stock keeping unit (SKU) identifier.",
-      "item_name": "Clinical product name.",
-      "quantity": "The current physical inventory counts.",
-      "reorder_level": "Threshold at which stock must be replenished.",
-      "supplier": "External entity providing the stock.",
-      "department_id": "[FK -> departments.id] Assigns ownership and responsibility for supply stock."
+      "item_name": "Clinical product name (e.g., 'Nitrile Gloves', 'Syringe 5ml'). Multiple rows may exist for the same item_name across departments.",
+      "quantity": "Current physical inventory count for this item in this specific department. Not the total clinic stock on its own.",
+      "reorder_level": "The minimum stock threshold for this item in this department. When quantity falls below this value, the item needs restocking.",
+      "supplier": "External vendor providing the stock.",
+      "department_id": "[FK -> departments.id] Identifies which department holds this particular stock unit.",
+      "unit_cost": "Cost per single unit of this item [FLOAT]. Multiply by quantity to calculate current inventory value."
     }
   },
   "lab_results": {
-    "concept": "Pathology and diagnostic data. Use this to identify clinical risks and trends.",
+    "concept": "Pathology and diagnostic testing data. Each row is one individual test result, linked to the appointment when the test was ordered. Note: A single appointment can have multiple lab results (e.g., a patient may have a Glucose test, a Blood Pressure reading, and a CBC all in one visit). To count the number of patients with a specific lab condition (e.g., abnormal glucose), you must use DISTINCT on patient_id after joining lab_results -> appointments -> patients to avoid counting the same patient multiple times across visits.",
     "columns_with_descriptions": {
       "id": "[PK] Unique test result record.",
-      "appointment_id": "[FK -> appointments.id] Contextualizes the test within a visit.",
-      "test_name": "Medical test nomenclature (e.g., 'Glucose').",
-      "result_value": "The numerical biological metric recorded.",
-      "reference_range": "The clinical 'Normal' boundaries.",
-      "is_abnormal": "Categorical flag ('Yes', 'No')."
+      "appointment_id": "[FK -> appointments.id] Contextualizes the test within a specific visit.",
+      "test_name": "Medical test nomenclature (e.g., 'Glucose', 'HbA1c', 'Blood Pressure'). Use ILIKE for flexible matching.",
+      "result_value": "The recorded numerical or categorical biological metric.",
+      "reference_range": "The clinically normal boundary for this test (e.g., '70-100 mg/dL').",
+      "is_abnormal": "Categorical flag indicating whether the result falls outside the normal range. Known values: 'Yes', 'No'."
     }
   },
   "prescriptions": {
-    "concept": "Pharmacotherapy management. Use this to track prescribed drugs and dosages.",
+    "concept": "Pharmacotherapy and medication management. Each row is one prescription issued during an appointment. Note: A single appointment can result in multiple prescriptions (e.g., a patient may receive Metformin and Lisinopril in the same visit). To count unique patients on a medication, use DISTINCT on patient_id after joining prescriptions -> appointments -> patients.",
     "columns_with_descriptions": {
       "id": "[PK] Unique prescription record.",
-      "appointment_id": "[FK -> appointments.id] Links medication to a visit.",
-      "medication": "Name of the drug.",
-      "dosage": "Strength and quantity.",
-      "frequency": "Administration rate (e.g., 'TID').",
-      "duration": "Length of the treatment course.",
-      "notes": "Clinician's specific instructions."
+      "appointment_id": "[FK -> appointments.id] Links the medication to the clinical visit in which it was prescribed.",
+      "medication": "Name of the drug (e.g., 'Metformin', 'Atorvastatin'). Use ILIKE for flexible matching.",
+      "dosage": "Prescribed strength and unit (e.g., '500mg').",
+      "frequency": "Administration schedule (e.g., 'Once Daily', 'TID' meaning three times a day).",
+      "duration": "Length of the treatment course (e.g., '30 days', '2 weeks').",
+      "notes": "Clinician's specific administration instructions or warnings."
     }
   },
   "clinical_notes": {
-    "concept": "Rich narrative clinical documentation. Use this to identify specific symptoms, lifestyle notes, or triage patterns via SQL joins.",
+    "concept": "Unstructured narrative clinical documentation written by the attending doctor during or after an appointment. Each appointment has at most one clinical note. These are free-text records and are semantically searched via the RAG vector system — they are not intended for SQL pattern matching. For structured patient data queries, use the other tables. Only use this table in SQL when you need to join it to retrieve the text content for a known set of appointment_ids.",
     "columns_with_descriptions": {
       "id": "[PK] Record identifier.",
-      "appointment_id": "[FK -> appointments.id] Links the note to a visit.",
-      "content": "The actual narrative medical note text."
+      "appointment_id": "[FK -> appointments.id] Links the note to its associated appointment. One-to-one relationship.",
+      "content": "The full narrative medical note text. Rich and unstructured. Semantically searched via vector embeddings."
+    }
+  },
+  "diagnoses": {
+    "concept": "Structured clinical classifications recorded for each encounter. Each appointment can have multiple diagnoses — a primary condition and any secondary co-morbidities. Note: To count how many unique patients have ever been diagnosed with a specific condition, use DISTINCT on patient_id after joining diagnoses -> appointments -> patients. Without DISTINCT, you will overcount patients who had the same diagnosis across multiple appointments.",
+    "columns_with_descriptions": {
+      "id": "[PK] Unique diagnosis record.",
+      "appointment_id": "[FK -> appointments.id] Links the diagnosis to the specific clinical visit.",
+      "condition_name": "The colloquial or clinical name of the disease or condition (e.g., 'Type 2 Diabetes', 'Asthma'). Use ILIKE for flexible matching.",
+      "icd_code": "Standardized ICD-10 medical classification code (e.g., 'E11' for Type 2 Diabetes). Use for precise medical coding queries.",
+      "is_primary": "Indicates whether this is the main reason for the visit. Known values: 'Yes' (primary condition), 'No' (secondary/co-morbidity)."
+    }
+  },
+  "clinical_guidelines": {
+    "concept": "Hospital policy documents, treatment protocols, and clinical best-practice guidelines. These are not tied to any specific patient or appointment. They represent the institutional knowledge base of the clinic. This table is searched exclusively via the RAG semantic vector system and should not be used in SQL queries for patient data.",
+    "columns_with_descriptions": {
+      "id": "[PK] Unique guideline record.",
+      "title": "Name of the protocol or policy document (e.g., 'Sepsis Management Protocol').",
+      "category": "Clinical department or focus area this guideline belongs to (e.g., 'Cardiology', 'Emergency Triage').",
+      "content": "Full narrative text of the guideline. Semantically indexed for RAG retrieval."
     }
   }
 }

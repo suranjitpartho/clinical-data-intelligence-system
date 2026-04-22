@@ -24,6 +24,7 @@ class Appointment(Base):
     billing = relationship("Billing", back_populates="appointment", uselist=False)
     prescriptions = relationship("Prescription", back_populates="appointment")
     lab_results = relationship("LabResult", back_populates="appointment")
+    diagnoses = relationship("Diagnosis", back_populates="appointment")
 
 class ClinicalNote(Base):
     __tablename__ = "clinical_notes"
@@ -63,3 +64,24 @@ class LabResult(Base):
     is_abnormal = Column(String) # For simple filtering
     
     appointment = relationship("Appointment", back_populates="lab_results")
+
+class Diagnosis(Base):
+    __tablename__ = "diagnoses"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id"), nullable=False)
+    
+    condition_name = Column(String, nullable=False) # e.g., "Asthma"
+    icd_code = Column(String, nullable=False)       # e.g., "J45"
+    is_primary = Column(String)                     # "Yes" or "No"
+    
+    appointment = relationship("Appointment", back_populates="diagnoses")
+
+class ClinicalGuideline(Base):
+    __tablename__ = "clinical_guidelines"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=False)
+    category = Column(String)
+    content = Column(Text, nullable=False)
+    vector = Column(Vector(1024))

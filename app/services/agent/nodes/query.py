@@ -20,7 +20,6 @@ def rewrite_node(state: AgentState, llm):
     if rewritten_query.lower() == state["query"].lower():
         logs_msg = "--- NEW TOPIC DETECTED: QUERY NOT REWRITTEN ---"
         
-    print(f"\n[AGENT] {logs_msg}")
     return {
         **state, 
         "query": rewritten_query, 
@@ -37,5 +36,4 @@ def intent_node(state: AgentState, llm):
     if "BOTH" in response:
         tools = ["sql", "rag"]
         
-    print(f"[AGENT] INTENTS: {tools}")
     return {**state, "tools_needed": tools, "logs": f"--- INTENTS: {', '.join(tools).upper()} ---"}

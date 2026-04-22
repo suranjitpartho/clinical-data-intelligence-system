@@ -8,7 +8,6 @@ def synthesis_node(state: AgentState, llm):
         medical_context="\n".join(state.get("medical_context", []))[:3000]
     )
     answer = llm.invoke(synth_prompt).content.replace("<|eot_id|>", "")
-    print(f"[AGENT] RESPONSE READY.")
     return {**state, "final_answer": answer}
 
 # Placeholder for future "Data Verification" Node

@@ -41,8 +41,8 @@ const TraceSidebar = ({ isOpen, setIsOpen, logs }) => {
         {logs ? (
           <div className="animate-fade-in flex flex-col h-full">
             <div className="space-y-4 flex-1">
-              <div className="text-[13px] leading-[1.6] text-dark-grey whitespace-pre-wrap">
-                {logs}
+              <div className="text-[13px] leading-[1.7] text-gray-500 italic whitespace-pre-wrap">
+                {logs.replace(/\*/g, '•')}
               </div>
             </div>
 

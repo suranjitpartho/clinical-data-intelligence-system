@@ -51,11 +51,61 @@ def sql_node(state: AgentState, llm):
     if "<thought>" in response_content and "</thought>" in response_content:
         thought_block = response_content.split("<thought>")[1].split("</thought>")[0].strip()
     
-    # Clean SQL: Strip thoughts and markdown blocks
-    sql = response_content
-    if "</thought>" in sql:
-        sql = sql.split("</thought>")[-1].strip()
-    sql = re.sub(r'```sql|```', '', sql).strip()
+    # 1. Precise Extraction: Split by the </thought> tag to isolate the code area
+    if "</thought>" in response_content:
+        potential_sql = response_content.split("</thought>")[-1].strip()
+    else:
+        potential_sql = response_content.strip()
+
+    # Try markdown blocks within the potential SQL area first
+    sql_blocks = re.findall(r'```(?:sql)?\n?(.*?)\n?```', potential_sql, re.DOTALL | re.IGNORECASE)
+    if sql_blocks:
+        sql = sql_blocks[-1].strip()
+    else:
+        # Fallback: Find 'WITH' or 'SELECT' at the start of a line in the potential SQL area
+        lines = potential_sql.split("\n")
+        cleaned_lines = []
+        found_start = False
+        for line in lines:
+            upper_line = line.strip().upper()
+            if not found_start and (upper_line.startswith("SELECT ") or upper_line.startswith("WITH ")):
+                found_start = True
+            if found_start:
+                cleaned_lines.append(line)
+        sql = "\n".join(cleaned_lines).strip()
+        
+        # Final desperate fallback
+        if not sql:
+            sql_match = re.findall(r'(?:WITH|SELECT).*?;', potential_sql, re.DOTALL | re.IGNORECASE)
+            if sql_match:
+                sql = sql_match[-1].strip()
+            else:
+                sql = potential_sql
+            
+    # Final cleanup of any lingering backticks or bold markers
+    sql = sql.replace("```sql", "").replace("```", "").strip()
+    
+    # Precise Trim: Ensure we don't have conversational headers before the code
+    # We find the first line that contains our identified starting keyword
+    sql_lines = sql.split("\n")
+    cleaned_lines = []
+    found_start = False
+    for line in sql_lines:
+        if not found_start and ("SELECT " in line.upper() or "WITH " in line.upper()):
+            found_start = True
+        if found_start:
+            cleaned_lines.append(line)
+    sql = "\n".join(cleaned_lines).strip()
+    
+    # SAFETY NET: If the LLM completely failed to generate a SELECT query, stop here.
+    if not sql.upper().startswith("SELECT") and not sql.upper().startswith("WITH"):
+        return {
+            **state,
+            "error_count": error_count + 1,
+            "tool_query": "ERROR: The AI failed to generate a valid SQL query.",
+            "logs": state.get("logs", "") + "\nERROR: Context window exhausted or LLM failed to output SQL."
+        }
+    
     
     try:
         results = session.execute(text(sql)).fetchall()
@@ -65,7 +115,6 @@ def sql_node(state: AgentState, llm):
         # THE TRUE REASONING TRACE: Only show original reasoning to the user
         final_trace = thought_block if thought_block else "Analyzing database for clinical patterns..."
         
-        print(f"[AGENT] SQL SUCCESS: Found {len(data)} results.")
         return {
             **state, 
             "data_results": data, 
@@ -75,28 +124,49 @@ def sql_node(state: AgentState, llm):
     except Exception as e:
         session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
         session.close()
-        print(f"[AGENT] SQL ERROR: {str(e)[:100]}...")
+        # Truncate large SQL in logs to keep the Reason Trace readable
+        sql_snippet = sql[:200] + "..." if len(sql) > 200 else sql
+        error_msg = f"\nERROR at attempt {error_count+1}: {str(e)[:150]}...\n[SQL Snippet]: {sql_snippet}"
+        
         return {
             **state, 
             "error_count": error_count + 1, 
             "tool_query": f"ERROR: {str(e)}\nSQL attempt: {sql}",
-            "logs": state.get("logs", "") + f"\nERROR at attempt {error_count+1}: {str(e)}"
+            "logs": state.get("logs", "") + error_msg
         }
 
 def rag_node(state: AgentState):
     session = SessionLocal()
-    data = get_clinical_notes_semantic(session, state["query"])
+    search_query = state["query"]
+    
+    # Context Injection (Context Collision Fix)
+    # If SQL already found specific people, inject their names into the vector search
+    if state.get("data_results") and isinstance(state["data_results"], list):
+        names = []
+        for row in state["data_results"]:
+            if isinstance(row, dict):
+                if "first_name" in row and "last_name" in row:
+                    names.append(f"{row['first_name']} {row['last_name']}")
+                elif "patient_name" in row:
+                    names.append(str(row["patient_name"]))
+        
+        # Deduplicate and limit to prevent massive vector queries
+        names = list(set(names))[:5]
+        if names:
+            search_query += f". Specific focus on patients: {', '.join(names)}"
+
+    data = get_clinical_notes_semantic(session, search_query)
     session.close()
     
     # Store unstructured text in medical_context
     context = [f"Record: {d['content']}" for d in data]
     
-    print(f"[AGENT] RAG SUCCESS: Found {len(data)} results.")
+    print(f"[AGENT] RAG SUCCESS: Found {len(data)} results for query: {search_query[:50]}...")
     return {
         **state, 
         "medical_context": context, 
         "tool_query": "Semantic Search on Clinical Notes",
-        "logs": state.get("logs", "") + "\n--- Semantic Search Active ---"
+        "logs": state.get("logs", "")
     }
 
 def should_retry_sql(state: AgentState):
