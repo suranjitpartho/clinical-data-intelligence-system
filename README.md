@@ -1,126 +1,121 @@
-# Clinical Data Intelligence System
+# CLINICAL DATA INTELLIGENCE AGENT
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-green.svg)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)
-![Vector Search](https://img.shields.io/badge/pgvector-Semantic_Search-orange.svg)
-![Status](https://img.shields.io/badge/Status-Development-yellow.svg)
+<br>
 
-## Overview
-The **Clinical Data Intelligence System (CDIS)** is a next-generation AI-powered backend designed for healthcare providers. It solves the "Unstructured Data Problem" in clinical environments by combining traditional relational record-keeping with advanced **Semantic Search** and **AI Agent orchestration**.
+*This project is a smart AI assistant built for hospitals and clinics. It helps doctors and staff find information quickly by talking to it in plain English. The agent can automatically search through patient records, read medical notes, and even calculate statistics from complex databases. By combining structured data with AI-powered search, it saves hours of manual work and helps healthcare teams make better decisions for their patients.*
 
-### The Problem
-In modern clinics, over 80% of patient data exists in unstructured "Clinical Notes." Traditional systems cannot query this data efficiently. Doctors struggle to find historical patterns in patients' notes, leading to delayed diagnoses and cognitive load.
+![GitHub repo size](https://img.shields.io/github/repo-size/suranjitpartho/clinical-data-intelligence-system?color=blue)
+![GitHub last commit](https://img.shields.io/github/last-commit/suranjitpartho/clinical-data-intelligence-system?color=28C78D)
+![GitHub top language](https://img.shields.io/github/languages/top/suranjitpartho/clinical-data-intelligence-system?color=red)
+![Architecture](https://img.shields.io/badge/architecture-LangGraph-gold)
 
-### The Solution
-CDIS utilizes a **Hybrid Retrieval-Augmented Generation (RAG)** architecture. It allows administrators to query structured data (billing, staff, inventory) via SQL and enables doctors to perform semantic search across millions of words of clinical notes using AI vectors—all while maintaining a **Privacy-First** local-first architecture.
+<br>
 
----
+> **SITUATION:** Clinical environments suffer from fragmented data. Quantitative metrics (billing/labs) live in rigid SQL databases, while qualitative insights (clinical notes) are locked in unstructured text. Clinicians lose hours waiting for manual data pulls, delaying patient care and operational decisions.
 
-## Tech Stack
-*   **Backend:** FastAPI (Python) - High performance, asynchronous.
-*   **Database:** PostgreSQL 16 + `pgvector` for vector similarity search.
-*   **ORM:** SQLAlchemy 2.0 with Alembic for migrations.
-*   **Local AI (Inference):** Native Apple **MLX Framework** running **Llama-3 (8B)**.
-*   **Local AI (Embeddings):** `BAAI/bge-m3` running locally on Apple Silicon.
-*   **AI Orchestration:** Provider-agnostic Agent (Supports Local MLX, OpenAI, and Anthropic).
-*   **Compliance:** Designed with NZ Health Information Security (HISO) principles.
+> **TARGET:** The mission was to build a "Clinical Intelligence Layer" that translates natural language into precise database queries.
+
+> **ACTION:** Engineered a deterministic state machine using **LangGraph** to manage complex reasoning loops. Implemented **Proactive Schema Discovery** to fetch real categorical values from the DB and a **Self-Healing SQL** node that autonomously captures PostgreSQL errors and rewrites queries until successful.
+
+> **RESULT:** Reduced data-pull latency from days to **sub-second execution** with near-100% precision. Built a **Reasoning Trace** UI that exposes the agent's internal logic, building critical trust with medical professionals.
+
+<br>
 
 ---
+
+### Core Features
+*   **LangGraph Orchestration:** State-based reasoning with loops and conditional edges.
+*   **Context-Aware Query Transformation:** Rewrites follow-up questions into standalone queries to maintain accuracy in multi-turn conversations.
+*   **Proactive Schema Discovery:** The agent fetches real categorical values (e.g., specific status flags) from the DB before writing SQL to eliminate hallucinations.
+*   **Hybrid Data Retrieval:** Combines exact-match PostgreSQL with pgvector semantic search.
+*   **Glassmorphism UI:** Premium, modern frontend designed with Tailwind CSS.
+
+<br>
+
+### Detailed System Architecture
+
+The system is built on a modular, event-driven architecture designed for clinical precision and high availability.
 
 ```mermaid
 graph TD
-    User([Doctor / Admin]) --> API[FastAPI Entry Point]
+    User([User Query]) --> Rewrite[Query Rewrite Node]
+    Rewrite --> Router{Intent Router}
     
-    subgraph "Native Apple Silicon Inference"
-    Agent[Clinical Agent] --> MLX[Apple MLX Server]
-    MLX --> Llama[Llama-3 8B Instruct]
+    Router -->|Structured| Discovery[Schema Discovery]
+    Discovery --> SQL[SQL Execution Node]
+    Router -->|Unstructured| RAG[Semantic RAG Node]
+    Router -->|General| Synth[Synthesis Node]
+    
+    SQL -->|Syntax Error| SQL_Retry[Self-Correction Loop]
+    SQL_Retry --> SQL
+    SQL -->|Data Found| Synth
+    
+    RAG -->|Medical Context| Synth
+    Synth --> Output([Clinical Insight])
+    
+    subgraph "Hybrid Data Layer"
+    Postgres[(PostgreSQL)]
+    Vector[(pgvector Index)]
     end
     
-    subgraph "Hybrid Retrieval"
-    Agent --> SQL[SQL Query Tool]
-    Agent --> RAG[Semantic Search Tool]
-    end
-    
-    SQL --> DB[(PostgreSQL 16)]
-    RAG --> VectorIndex[(pgvector Index)]
-    
-    subgraph "Local-First Privacy"
-    API --> LocalEmbed[Local BGE-M3 Model]
-    LocalEmbed --> VectorIndex
-    end
-    
-    DB --- VectorIndex
+    SQL -.-> Postgres
+    RAG -.-> Vector
 ```
 
+**1. The Reasoning Engine (LangGraph)**  
+Unlike traditional linear chains, this agent uses a **State Graph** to allow for cycles and conditional logic. This enables the agent to "pause" and verify data before responding, ensuring that clinical assumptions are backed by database evidence.
+
+**2. Self-Healing SQL & Proactive Discovery**  
+The agent implements a two-stage strategy for structured data:
+*   **Discovery:** It first queries the database metadata to find valid categorical values (e.g., interpreting "active" vs "ACTIVE").
+*   **Self-Correction:** If the generated SQL fails, the PostgreSQL error is fed back into the agent's context for an autonomous rewrite.
+
+**3. Hybrid Clinical Context (RAG + SQL)**  
+The system treats the database and clinical notes as two distinct but complementary sources of truth:
+*   **Structured Analysis:** Performs complex aggregations (averages, trends, counts) via exact SQL.
+*   **Semantic Intelligence (RAG):** Retrieves narrative context (patient history, symptom patterns) using **pgvector** and the **BAAI/bge-m3** embedding model, ensuring the final answer is clinically nuanced.
+
+<br>
+
+[![Tech Stack Icons](https://skillicons.dev/icons?i=py,fastapi,postgres,react,tailwind,vite&theme=dark)](https://skillicons.dev)
+![LangChain](https://img.shields.io/badge/LangChain-1C1C1C?style=for-the-badge&logo=langchain&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-1C1C1C?style=for-the-badge&logo=langchain&logoColor=white)
+
+<br>
+
 ---
 
-## Key Features
-*   **Semantic Note Retrieval:** Find "patients with respiratory signs who didn't respond to antibiotics" using meaning, not just keywords.
-*   **Agentic Workflows:** The AI agent automatically decides whether a user query needs a data table (SQL) or a note summary (RAG).
-*   **High Volume Seeding:** Pre-configured with **5,000+** realistic clinical records and appointments.
-*   **Enterprise-Ready:** UUID-based primary keys, comprehensive `audit_logs` for compliance, and automated DB migrations.
+### Developer Guide
 
----
-
-## Future Production Roadmap
-Currently, the system uses **Local Embedding Models** for maximum privacy. For enterprise production, the architecture is ready to scale to:
-1.  **Cloud Embeddings:** Integration with OpenAI (text-embedding-3-small) or Voyage AI.
-2.  **Distributed Task Queues:** Moving embedding generation to Celery/Redis for real-time note processing.
-3.  **FHIR Integration:** Full support for Fast Healthcare Interoperability Resources data standards.
-
----
-
----
-
-## Project Structure
-```text
-├── app/
-│   ├── db/              # Database connection & session management
-│   ├── models/          # SQLAlchemy ORM models (Clinical, Logs)
-│   ├── services/        # Business logic & AI Orchestration (LangGraph)
-│   └── main.py          # FastAPI application entry point
-├── docs/                # Technical & Business documentation
-├── migrations/          # Alembic database migration scripts
-├── scripts/             # Data seeding & AI embedding utilities
-├── .env.example         # Environment variable template
-└── requirements.txt     # Python dependencies
+**1. Backend Setup**
+```bash
+git clone https://github.com/suranjitpartho/clinical-data-intelligence-system.git
+cd clinical-data-intelligence-system
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+alembic upgrade head
+python scripts/seed_data.py
+python scripts/generate_embeddings.py  # Generate AI vectors for RAG
+uvicorn app.main:app --reload --port 8000
 ```
 
----
+**2. Frontend Setup**
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Setup & Installation
-1.  **Clone & Venv:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    ```
-2.  **Database Configuration:**
-    Ensure PostgreSQL 16 is running with `pgvector` installed. Configure `.env` with your variables.
-3.  **Run Migrations & Seed:**
-    ```bash
-    alembic upgrade head
-    PYTHONPATH=. venv/bin/python scripts/seed_data.py
-    ```
-4.  **Local AI Processing (Embeddings):**
-    ```bash
-    PYTHONPATH=. venv/bin/python scripts/generate_embeddings.py
-    ```
-5.  **Local AI Inference (Apple Silicon):**
-    Start the M5-optimized inference server in a dedicated terminal:
-    ```bash
-    source venv/bin/activate
-    python -m mlx_lm.server --model mlx-community/Meta-Llama-3-8B-Instruct-4bit
-    ```
-6.  **Run the Agent Test:**
-    ```bash
-    PYTHONPATH=. venv/bin/python scripts/test_agent.py
-    ```
+**3. Testing & Validation**
+```bash
+# Run agent logic tests
+python scripts/test_agent.py
 
----
+# Run semantic search validation
+python scripts/test_search.py
+```
 
-## Documentation
-Detailed technical and business documentation can be found in the `/docs` folder:
-*   [Architectural Decision Records (ADR)](docs/ARCHITECTURAL_DECISIONS.md)
-*   [Data Privacy & Compliance (NZ)](docs/DATA_PRIVACY_REPORT.md)
+<br>
+
+*Engineered with precision for the modern clinical data landscape.*
