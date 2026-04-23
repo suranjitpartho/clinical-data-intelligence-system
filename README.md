@@ -107,15 +107,6 @@ npm install
 npm run dev
 ```
 
-**3. Testing & Validation**
-```bash
-# Run agent logic tests
-python scripts/test_agent.py
-
-# Run semantic search validation
-python scripts/test_search.py
-```
-
 <br>
 
 *Engineered with precision for the modern clinical data landscape.*
