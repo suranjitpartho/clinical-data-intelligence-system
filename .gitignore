@@ -23,3 +23,6 @@ Thumbs.db
 # Project Internals
 PROJECT_BRIEF.md
 PROJECT_RULES.md
+
+# Legacy Assets
+frontend/src/assets/architecture_diagram.png
