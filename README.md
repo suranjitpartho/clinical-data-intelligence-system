@@ -1,6 +1,6 @@
 # CLINICAL DATA INTELLIGENCE SYSTEM
 
-*The Clinical Data Intelligence System is a professional AI platform designed to make clinical information easy to access through simple, natural conversation. It enables doctors and healthcare staff to instantly search patient records, medical notes, and lab results without needing technical database skills. By seamlessly integrating structured database records with unstructured clinical notes, the system automates manual reporting and provides clear insights that help medical teams save time and provide better care for their patients.*
+*The Clinical Data Intelligence System is an AI platform designed to make clinical information easy to access through simple, natural conversation. It enables doctors and healthcare staff to instantly search patient records, medical notes, and lab results without needing technical database skills. By seamlessly integrating structured database records with unstructured clinical notes, the system automates manual reporting and provides clear insights that help medical teams save time and provide better care for their patients.*
 
 ![Release](https://img.shields.io/badge/Release-v1.0-48C784)
 ![Platform](https://img.shields.io/badge/Platform-Web-CDDE21)
