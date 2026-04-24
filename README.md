@@ -1,7 +1,5 @@
 # CLINICAL DATA INTELLIGENCE SYSTEM
 
-<br>
-
 *The Clinical Data Intelligence System is a professional AI platform designed to make clinical information easy to access through simple, natural conversation. It enables doctors and healthcare staff to instantly search patient records, medical notes, and lab results without needing technical database skills. By seamlessly integrating structured database records with unstructured clinical notes, the system automates manual reporting and provides clear insights that help medical teams save time and provide better care for their patients.*
 
 ![Release](https://img.shields.io/badge/Release-v1.0-48C784)
@@ -26,9 +24,9 @@
 >
 > ⭐ **TARGET:** The mission was to build a "Clinical Intelligence Layer" that translates natural language into precise database queries.
 >
-> ⭐ **ACTION:** Engineered a deterministic state machine using **LangGraph** to orchestrate a hybrid retrieval system. Implemented a **Semantically Augmented Data Dictionary** to bridge clinical logic with SQL schemas, integrated **pgvector** for narrative medical searches, and built a **Proactive Discovery & Self-Healing loop** that autonomously corrects database hallucinations in real-time.
+> ⭐ **ACTION:** Engineered a deterministic state machine using *LangGraph* to orchestrate a hybrid retrieval system. Implemented a *Semantically Augmented Data Dictionary* to bridge clinical logic with SQL schemas, integrated *pgvector* for narrative medical searches, and built a *Proactive Discovery & Self-Healing loop* that autonomously corrects database hallucinations in real-time.
 >
-> ⭐ **RESULT:** Reduced data-pull latency from days to **sub-second execution** with near-100% precision. Built a *Reasoning Trace* UI that exposes the agent's internal logic, building critical trust with medical professionals.
+> ⭐ **RESULT:** Reduced clinical data retrieval workflows from hours or manual ticket-based requests to near real-time responses, significantly improving operational turnaround. Built a *Reasoning Trace* UI that exposes the agent's internal logic, designed to improve user trust and transparency for clinical workflows. 
 
 <br>
 
@@ -51,43 +49,22 @@ The system is built on a modular, state-managed architecture designed for high a
 
 
 <div align="center">
-  <img src="./frontend/src/assets/architecture_diagram.png" alt="System Architecture" width="100%">
+  <img src="./frontend/src/assets/architecture_diagram2.png" alt="System Architecture" width="100%">
 </div>
 
 <br>
 
-<details>
-<summary><b>📐 View Technical Architecture Blueprint (Mermaid)</b></summary>
+#### End-to-End Request Flow
 
-```mermaid
-graph TD
-    User([User Query]) --> Rewrite[Query Rewrite Node]
-    Rewrite --> Router{Intent Router}
-    
-    Dict[(Data Dictionary)] -.-> Router
-    Dict -.-> SQL
-    
-    Router -->|Structured| Discovery[Schema Discovery]
-    Discovery --> SQL[SQL Execution Node]
-    Router -->|Unstructured| RAG[Semantic RAG Node]
-    Router -->|General| Synth[Synthesis Node]
-    
-    SQL -->|Syntax Error| SQL_Retry[Self-Correction Loop]
-    SQL_Retry --> SQL
-    SQL -->|Data Found| Synth
-    
-    RAG -->|Medical Context| Synth
-    Synth --> Output([Clinical Insight])
-    
-    subgraph "Hybrid Data Layer"
-    Postgres[(PostgreSQL)]
-    Vector[(pgvector Index)]
-    end
-    
-    SQL -.-> Postgres
-    RAG -.-> Vector
-```
-</details>
+1.  **Natural Language Input**: User enters a query (e.g., *"Show abnormal lab results for Patient A"*).
+2.  **Contextual Rewrite**: The system resolves conversation history and converts ambiguous prompts into standalone, context-rich queries.
+3.  **Intent Routing**: The Orchestrator determines if the request requires *SQL retrieval* (structured labs), *Semantic RAG* (clinical notes), or a *Hybrid response*.
+4.  **Multi-Modal Retrieval**: 
+    - **SQL Node**: Queries structured tables using schema-aware logic.
+    - **RAG Node**: Searches clinical notes and protocols using *pgvector*.
+5.  **Validation & Self-Correction**: Any SQL syntax errors or schema mismatches capture the *PostgreSQL traceback*, triggering an autonomous retry loop for immediate self-correction.
+6.  **Synthesis Layer**: Combines structured data and unstructured evidence into a single, grounded clinical response.
+7.  **Reasoning Trace**: The execution path is exposed to the UI, providing full transparency of the AI’s decision-making process.
 
 <br>
 
@@ -105,25 +82,26 @@ graph TD
 
 ## Engineering Deep Dive: Challenges & Solutions
 
-✴️ Challenge: Managing Non-Linear Clinical Logic → Solution: State-Machine Orchestration  
-At its core, the system utilizes a **LangGraph-driven State Graph** to manage complex reasoning. Unlike basic linear chains, this architecture allows for **directed cycles**, enabling the agent to revisit previous steps if conditions aren't met. This state-managed approach allows the system to generate a **Reasoning Trace**, exposing its internal "Chain of Thought" to clinicians for verification before final synthesis.
+✴️ **Challenge: Managing Non-Linear Clinical Logic → Solution: State-Machine Orchestration**  
+At its core, the system utilizes a *LangGraph-driven State Graph* to manage complex reasoning. Unlike basic linear chains, this architecture allows for *directed cycles*, enabling the agent to revisit previous steps if conditions aren't met. This state-managed approach allows the system to generate a *Reasoning Trace*, exposing its internal "Chain of Thought" to clinicians for verification before final synthesis.
 
-✴️ Challenge: Conversational Context Drift → Solution: Recursive Query Transformation  
-To support natural, multi-turn dialogue, the system implements an intelligent **Query Rewrite Node**. This node uses LLM-based transformation to turn ambiguous follow-up questions (e.g., *"What about his labs?"*) into standalone, context-rich queries (*"Show laboratory results for Patient X"*). This prevents "memory contamination" and ensures the intent router always receives a clear, precise instruction.
+✴️ **Challenge: Conversational Context Drift → Solution: Recursive Query Transformation**  
+To support natural, multi-turn dialogue, the system implements an intelligent *Query Rewrite Node*. This node uses LLM-based transformation to turn ambiguous follow-up questions (e.g., *"What about his labs?"*) into standalone, context-rich queries (*"Show laboratory results for Patient X"*). This prevents "memory contamination" and ensures the intent router always receives a clear, precise instruction.
 
-✴️ Challenge: Fragmented Patient Histories → Solution: Multi-Modal Data Fusion (SQL + RAG)  
-To provide a 360-degree patient view, the system implements a **multi-modal retrieval strategy**. It simultaneously pulls quantitative data (billing, labs) via exact-match SQL and qualitative narratives (symptoms, history) via semantic search. By utilizing the **BGE-M3** embedding model and **pgvector**, the system captures subtle medical nuances that traditional keyword search would miss.
+✴️ **Challenge: Fragmented Patient Histories → Solution: Multi-Modal Data Fusion (SQL + RAG)**  
+To provide a 360-degree patient view, the system implements a *multi-modal retrieval strategy*. It simultaneously pulls quantitative data (billing, labs) via exact-match SQL and qualitative narratives (symptoms, history) via semantic search. By utilizing the *BGE-M3* embedding model and *pgvector*, the system captures subtle medical nuances that traditional keyword search would miss.
 
-✴️ Challenge: SQL Hallucination & Syntactic Errors → Solution: Proactive Discovery & Self-Correction  
-To guarantee precision, the system employs **Proactive Schema Discovery** guided by a **Semantically Augmented Data Dictionary.** Before generating SQL, the agent consults a custom knowledge map that defines complex clinical relationships and business rules (e.g., precise age-calculation logic). It then fetches real-time categorical values from the database to ensure the query is perfectly grounded in live data. If a query fails, an autonomous **Self-Correction Loop** captures the database error and feeds it back to the agent for an immediate, self-healing rewrite.
+✴️ **Challenge: SQL Hallucination & Syntactic Errors → Solution: Proactive Discovery & Self-Correction**  
+To guarantee precision, the system employs *Proactive Schema Discovery* guided by a *schema-aware data dictionary*. Before generating SQL, the agent consults a custom knowledge map that defines complex clinical relationships and business rules (e.g., precise age-calculation logic). It then fetches real-time categorical values from the database to ensure the query is perfectly grounded in live data. If a query fails, an autonomous *Self-Correction Loop* captures the database error and feeds it back to the agent for an immediate, self-healing rewrite.
 
 <br>
 
 ## Technical Rationale: Why This Stack?
 
-*   **LangGraph over LangChain**: Unlike standard chains, LangGraph provides the fine-grained control over **cycles and state** required for a non-linear clinical diagnostic flow.
-*   **PostgreSQL + pgvector over Pinecone**: By using pgvector, the system can perform complex SQL joins and semantic vector searches within a **single transaction**, ensuring data consistency between structured records and clinical notes.
+*   **LangGraph over LangChain**: Unlike standard chains, LangGraph provides the fine-grained control over *cycles and state* required for a non-linear clinical diagnostic flow.
+*   **PostgreSQL + pgvector over Pinecone**: By using pgvector, the system can perform complex SQL joins and semantic vector searches within a *single transaction*, ensuring data consistency between structured records and clinical notes.
 *   **FastAPI over Django**: Chosen for its high-performance asynchronous capabilities, enabling the sub-second response times critical for real-time medical consultation environments.
+*   **Advanced Prompt Strategy**: Utilizes *Dynamic Context Injection* and *Few-Shot Clinical Examples*. The system programmatically assembles prompts by combining the User Query, the Data Dictionary, and real-time database categories, ensuring the LLM operates with "Ground Truth" rather than relying on internal weights.
 
 <br>
 
@@ -132,6 +110,20 @@ To guarantee precision, the system employs **Proactive Schema Discovery** guided
 *   **Reasoning Trace**: The system exposes its internal "Chain of Thought" to the user, allowing clinicians to verify the logic behind every data retrieval and synthesis.
 *   **Audit Accountability**: Every interaction is logged with precise tool usage and raw query data (via `AuditLog`), ensuring a transparent audit trail for all clinical intelligence activities.
 *   **Deterministic Guardrails**: Using LangGraph, the system enforces a strict state-managed flow, preventing the AI from wandering into "creative" or ungrounded responses.
+*   **Clinical Simulation & Privacy**: To ensure absolute privacy and HIPAA compliance, this system operates on a **proprietary synthetic dataset**. I engineered a custom **Clinical Simulation Engine** that generates high-entropy patient records and longitudinal narratives for rigorous testing.
+
+<br>
+
+## Project Structure
+
+```text
+├── app/               # FastAPI Backend (Graph logic, Nodes, Models)
+├── frontend/          # React 19 + Tailwind 4 Frontend
+├── migrations/        # SQLAlchemy/Alembic Database Migrations
+├── scripts/           # Data Seeding & BGE-M3 Embedding Generation
+├── app/services/      # Core Data Dictionary & AI Prompts
+└── requirements.txt   # Backend dependencies
+```
 
 <br>
 
