@@ -50,10 +50,22 @@ The system is built on a modular, state-managed architecture designed for high a
 ![Python](https://img.shields.io/badge/Python-3.11+-1C96E8?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-22C982?logo=fastapi&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-0.0.30-DBD51D?logo=langchain&logoColor=white) ![React](https://img.shields.io/badge/React-19.2-2572CF?logo=react&logoColor=white) ![Tailwind](https://img.shields.io/badge/Tailwind-4.2-1FD1CB?logo=tailwindcss&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-7078C4?logo=postgresql&logoColor=white)
 
 
+<div align="center">
+  <img src="./frontend/src/assets/architecture_diagram.png" alt="System Architecture" width="100%">
+</div>
+
+<br>
+
+<details>
+<summary><b>📐 View Technical Architecture Blueprint (Mermaid)</b></summary>
+
 ```mermaid
 graph TD
     User([User Query]) --> Rewrite[Query Rewrite Node]
     Rewrite --> Router{Intent Router}
+    
+    Dict[(Data Dictionary)] -.-> Router
+    Dict -.-> SQL
     
     Router -->|Structured| Discovery[Schema Discovery]
     Discovery --> SQL[SQL Execution Node]
@@ -75,6 +87,9 @@ graph TD
     SQL -.-> Postgres
     RAG -.-> Vector
 ```
+</details>
+
+<br>
 
 #### System Stack Overview
 
