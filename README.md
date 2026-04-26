@@ -74,6 +74,7 @@ The system is built on a modular, state-managed architecture designed for high a
 | :--- | :--- | :--- |
 | **Orchestration** | **LangGraph** | Managing state-based clinical reasoning and tool loops. |
 | **Knowledge Layer** | **Data Dictionary** | Mapping natural language to complex clinical business logic. |
+| **Observability** | **Langfuse** | Capturing LLM latency, token usage, and graph execution traces. |
 | **API Backend** | **FastAPI** | Providing high-concurrency, sub-second response times. |
 | **Knowledge Base** | **pgvector** | Storing medical narratives and protocol embeddings. |
 | **Modern UI** | **React 19** | Delivering a transparent "Reasoning Trace" for clinician trust. |
@@ -108,6 +109,7 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 ## Trust & Transparency
 
 *   **Reasoning Trace**: The system exposes its internal "Chain of Thought" to the user, allowing clinicians to verify the logic behind every data retrieval and synthesis.
+*   **Observability & Tracing**: Integrated with **Langfuse** for real-time monitoring of LLM metrics (latency, token, costs) and full visualization of the LangGraph execution tree to ensure production-grade reliability.
 *   **Audit Accountability**: Every interaction is logged with precise tool usage and raw query data (via `AuditLog`), ensuring a transparent audit trail for all clinical intelligence activities.
 *   **Deterministic Guardrails**: Using LangGraph, the system enforces a strict state-managed flow, preventing the AI from wandering into "creative" or ungrounded responses.
 *   **Clinical Simulation & Privacy**: To ensure absolute privacy and HIPAA compliance, this system operates on a **proprietary synthetic dataset**. I engineered a custom **Clinical Simulation Engine** that generates high-entropy patient records and longitudinal narratives for rigorous testing.
