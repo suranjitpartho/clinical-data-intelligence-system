@@ -7,10 +7,12 @@ import Sidebar from './components/Sidebar';
 import MessageList from './components/Chat/MessageList';
 import ChatInput from './components/Chat/ChatInput';
 import TraceSidebar from './components/TraceSidebar';
+import AnalyticsView from './components/AnalyticsView';
 
 const API_BASE = "http://localhost:8000";
 
 function App() {
+  const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'
   const [messages, setMessages] = useState([]);
   const [history, setHistory] = useState([]); 
   const [threadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
@@ -22,8 +24,29 @@ function App() {
   const [availableModels, setAvailableModels] = useState([]);
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const [traceLogs, setTraceLogs] = useState("");
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   
   const scrollRef = useRef(null);
+
+  const fetchAnalytics = async () => {
+    setIsAnalyticsLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/analytics`);
+      setAnalyticsData(res.data);
+    } catch (error) {
+      console.error("Analytics fetch error:", error);
+    } finally {
+      setIsAnalyticsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentView === 'analytics') {
+      fetchAnalytics();
+    }
+  }, [currentView]); // Only fetch when switching to analytics view
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -83,6 +106,7 @@ function App() {
       if (response.data.history) {
         setHistory(response.data.history);
       }
+      await fetchAnalytics();
     } catch (error) {
       setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not connect to the Clinical Intelligence backend." }]);
     } finally {
@@ -103,23 +127,35 @@ function App() {
           setSelectedProvider={setSelectedProvider}
           modelName={modelName}
           setModelName={setModelName}
+          currentView={currentView}
+          setCurrentView={setCurrentView}
         />
 
-        <main className="flex-1 flex flex-col bg-off-white overflow-hidden">
-          <MessageList 
-            messages={messages} 
-            isLoading={isLoading} 
-            scrollRef={scrollRef} 
-            setIsTraceOpen={setIsTraceOpen}
-            setTraceLogs={setTraceLogs}
-          />
-          
-          <ChatInput 
-            input={input}
-            setInput={setInput}
-            handleSend={handleSend}
-            isLoading={isLoading}
-          />
+        <main className="flex-1 flex flex-col bg-off-white overflow-hidden relative">
+          {currentView === 'chat' ? (
+            <>
+              <MessageList 
+                messages={messages} 
+                isLoading={isLoading} 
+                scrollRef={scrollRef} 
+                setIsTraceOpen={setIsTraceOpen}
+                setTraceLogs={setTraceLogs}
+              />
+              
+              <ChatInput 
+                input={input}
+                setInput={setInput}
+                handleSend={handleSend}
+                isLoading={isLoading}
+              />
+            </>
+          ) : (
+            <AnalyticsView 
+              metrics={analyticsData} 
+              isLoading={isAnalyticsLoading}
+              onBack={() => setCurrentView('chat')} 
+            />
+          )}
         </main>
 
         <TraceSidebar 

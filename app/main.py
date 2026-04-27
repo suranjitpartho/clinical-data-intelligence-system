@@ -42,6 +42,12 @@ async def get_config():
         "provider": os.getenv("AI_PROVIDER", "groq")
     }
 
+from app.services.analytics import analytics_service
+
+@app.get("/analytics")
+async def get_analytics():
+    return analytics_service.get_system_metrics()
+
 @app.post("/query")
 async def process_query(request: QueryRequest):
     try:

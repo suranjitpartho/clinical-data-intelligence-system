@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PlusCircle, MessageSquare, ChevronDown, Check } from 'lucide-react';
+import { PlusCircle, MessageSquare, ChevronDown, Check, BarChart3 } from 'lucide-react';
 
 const Sidebar = ({ 
   availableModels, 
@@ -8,7 +8,9 @@ const Sidebar = ({
   setSelectedModel, 
   setSelectedProvider, 
   modelName, 
-  setModelName 
+  setModelName,
+  currentView,
+  setCurrentView
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -24,14 +26,34 @@ const Sidebar = ({
   }, []);
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 flex flex-col hidden md:flex">
+    <aside className="w-64 bg-white border-r border-gray-100 flex flex-col hidden md:flex z-40">
       <div className="p-4 flex-1">
-        <button className="w-full flex items-center justify-center gap-2 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium transition-all mb-6">
-          <PlusCircle size={16} /> New Consultation
+        <button 
+          onClick={() => setCurrentView('chat')}
+          className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all mb-6 ${
+            currentView === 'chat' 
+            ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
+            : 'bg-gray-50 hover:bg-gray-100 border border-gray-100 text-gray-600'
+          }`}
+        >
+          <PlusCircle size={16} /> New Clinical Query
         </button>
         
         <nav className="space-y-1">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">Recent</div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">Platform</div>
+          <div 
+            onClick={() => setCurrentView('analytics')}
+            className={`px-3 py-2 rounded-md flex items-center gap-3 text-sm font-medium cursor-pointer transition-all group ${
+              currentView === 'analytics'
+              ? 'bg-blue-50 text-clinical-blue'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-clinical-blue'
+            }`}
+          >
+            <BarChart3 size={16} className={currentView === 'analytics' ? 'text-clinical-blue' : 'text-gray-400 group-hover:text-clinical-blue'} />
+            <span className="truncate">System Performance</span>
+          </div>
+          
+          <div className="pt-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">Recent</div>
           <div className="px-3 py-2 bg-blue-50/50 text-clinical-blue rounded-md flex items-center gap-3 text-sm font-medium cursor-pointer">
             <MessageSquare size={16} />
             <span className="truncate">Department Statistics</span>
