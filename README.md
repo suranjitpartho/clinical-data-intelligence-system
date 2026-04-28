@@ -144,9 +144,10 @@ git clone https://github.com/suranjitpartho/clinical-data-intelligence-system.gi
 cd clinical-data-intelligence-system
 ```
 
-**2. Configure environment**
+**2. Configure environment**  
+Populate .env with your API keys and DATABASE credentials
 ```bash
-cp .env.example .env  # Populate .env with your API keys and DATABASE_URL
+cp .env.example .env
 ```
 
 **3. Deploy services**
