@@ -24,9 +24,9 @@
 >
 > ⭐ **TARGET:** The mission was to build a "Clinical Intelligence Layer" that translates natural language into precise database queries.
 >
-> ⭐ **ACTION:** Engineered a deterministic state machine using *LangGraph* to orchestrate a hybrid retrieval system. Implemented a *Semantically Augmented Data Dictionary* to bridge clinical logic with SQL schemas, integrated *pgvector* for narrative medical searches, and built a *Proactive Discovery & Self-Healing loop* that autonomously corrects database hallucinations in real-time.
+> ⭐ **ACTION:** Engineered a deterministic state machine using *LangGraph* to orchestrate a hybrid retrieval system. Implemented a *Semantically Augmented Data Dictionary* to bridge clinical logic with SQL schemas, integrated *pgvector* for narrative medical searches, and built a *Proactive Discovery & Self-Healing loop* that autonomously corrects database hallucinations in real-time. Developed a custom *Observability Layer* that mirrors Langfuse Cloud data for node-level latency and costing transparency.
 >
-> ⭐ **RESULT:** Reduced clinical data retrieval workflows from hours or manual ticket-based requests to near real-time responses, significantly improving operational turnaround. Built a *Reasoning Trace* UI that exposes the agent's internal logic, designed to improve user trust and transparency for clinical workflows. 
+> ⭐ **RESULT:** Reduced clinical data retrieval workflows from hours to near real-time responses. Built a dual-layer *Reasoning Trace UI* that exposes both the internal logic and the financial cost of every decision, improving trust, accountability, and operational predictability.
 
 <br>
 
@@ -37,6 +37,7 @@
 | **Self-Healing SQL** | Eliminates manual query fixes by autonomously correcting syntax errors. |
 | **Proactive Discovery** | Prevents hallucinations by fetching real categorical values before writing SQL. |
 | **Hybrid Retrieval** | Combines exact lab results with semantic insights from clinical notes. |
+| **Observability Trace** | Provides node-level transparency for latency, token density, and financial cost. |
 | **Contextual Rewrite** | Maintains diagnostic accuracy in multi-turn conversations by resolving pronouns. |
 
 <br>
@@ -108,11 +109,11 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 
 ## Trust & Transparency
 
-*   **Reasoning Trace**: The system exposes its internal "Chain of Thought" to the user, allowing clinicians to verify the logic behind every data retrieval and synthesis.
-*   **Observability & Tracing**: Integrated with **Langfuse** for real-time monitoring of LLM metrics (latency, token, costs) and full visualization of the LangGraph execution tree to ensure production-grade reliability.
-*   **Audit Accountability**: Every interaction is logged with precise tool usage and raw query data (via `AuditLog`), ensuring a transparent audit trail for all clinical intelligence activities.
+*   **Reasoning Trace**: The system exposes its internal "Chain of Thought" to the user, allowing clinicians to verify the logic and node-level execution sequence behind every data retrieval.
+*   **Deep Observability & System Analytics**: Integrated with *Langfuse Cloud* for real-time telemetry. Features a high-fidelity analytics dashboard that provides sub-second latency tracking, token density analysis, and 5-decimal micro-billing precision for every graph execution.
+*   **Performance & Financial Audit**: Every reasoning step (Rewrite, Classify, SQL, RAG) is logged with its specific *sub-second latency*, *token density*, and *USD cost*, ensuring transparent audit trails and predictable OPEX for medical departments.
 *   **Deterministic Guardrails**: Using LangGraph, the system enforces a strict state-managed flow, preventing the AI from wandering into "creative" or ungrounded responses.
-*   **Clinical Simulation & Privacy**: To ensure absolute privacy and HIPAA compliance, this system operates on a **proprietary synthetic dataset**. I engineered a custom **Clinical Simulation Engine** that generates high-entropy patient records and longitudinal narratives for rigorous testing.
+*   **Clinical Simulation & Privacy**: To ensure absolute privacy and HIPAA compliance, this system operates on a *proprietary synthetic dataset*. I engineered a custom *Clinical Simulation Engine* that generates high-entropy patient records and longitudinal narratives for rigorous testing.
 
 <br>
 
@@ -131,31 +132,23 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 
 ## Installation & Setup
 
-### 1. Backend Configuration
+### Quick Start with Docker (Recommended)
+This system is fully containerized. Deployment via Docker ensures environment consistency across both the Frontend and Backend services.
+
+**1. Clone the repository**
 ```bash
-# Clone the repository
 git clone https://github.com/suranjitpartho/clinical-data-intelligence-system.git
 cd clinical-data-intelligence-system
-
-# Environment Setup
-python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-pip install -r requirements.txt
-
-# Database & AI Initialization
-cp .env.example .env
-alembic upgrade head
-python scripts/seed_data.py
-python scripts/generate_embeddings.py  # Critical: Generates vector vectors for RAG
-
-# Launch API
-uvicorn app.main:app --reload --port 8000
 ```
 
-### 2. Frontend Configuration
+**2. Configure environment**
 ```bash
-cd frontend
-npm install
-npm run dev
+cp .env.example .env  # Populate .env with your API keys and DATABASE_URL
 ```
+
+**3. Deploy services**
+```bash
+docker-compose up --build
+```
+Once initialized, the unified application will be accessible at **http://localhost:8000**.
 
