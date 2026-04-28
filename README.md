@@ -135,6 +135,9 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 ### Quick Start with Docker (Recommended)
 This system is fully containerized. Deployment via Docker ensures environment consistency across both the Frontend and Backend services.
 
+> [!NOTE]
+> **Prerequisite:** Ensure your PostgreSQL instance supports the `pgvector` extension. (Standard on Supabase, Neon, and AWS RDS).
+
 **1. Clone the repository**
 ```bash
 git clone https://github.com/suranjitpartho/clinical-data-intelligence-system.git
