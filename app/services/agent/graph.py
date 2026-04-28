@@ -76,7 +76,18 @@ class ClinicalGraph:
     def run_query(self, query: str, thread_id: str = "default", history: List[Dict] = None):
         db = SessionLocal()
         try:
-            config = {"configurable": {"thread_id": thread_id}}
+            # Initialize Langfuse Callback if keys are available
+            callbacks = []
+            import os
+            if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+                try:
+                    from langfuse.langchain import CallbackHandler
+                    langfuse_handler = CallbackHandler()
+                    callbacks.append(langfuse_handler)
+                except Exception as e:
+                    print(f"Warning: Failed to initialize Langfuse callback: {e}")
+            
+            config = {"configurable": {"thread_id": thread_id}, "callbacks": callbacks}
             initial_state = {
                 "query": query,
                 "messages": history or [],
@@ -119,4 +130,9 @@ class ClinicalGraph:
         except Exception as e:
             return {"final_answer": f"Graph Error: {str(e)}", "data_results": []}
         finally:
+            if 'callbacks' in locals() and callbacks:
+                try:
+                    callbacks[0].flush()
+                except Exception:
+                    pass
             db.close()
