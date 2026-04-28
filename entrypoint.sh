@@ -11,11 +11,11 @@ alembic upgrade head
 
 # 2. Seed clinical data
 echo "--- 📝 Seeding Clinical Data ---"
-python scripts/seed_data.py
+PYTHONPATH=. python scripts/seed_data.py
 
 # 3. Generate medical embeddings
 echo "--- 🧠 Generating Semantic Embeddings (BGE-M3) ---"
-python scripts/generate_embeddings.py
+PYTHONPATH=. python scripts/generate_embeddings.py
 
 echo "--- ✅ System Initialized. Starting FastAPI Server ---"
 

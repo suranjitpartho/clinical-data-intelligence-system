@@ -7,7 +7,7 @@ pgvector==0.2.5
 langchain==0.1.12
 langgraph==0.0.30
 langchain-anthropic==0.1.1
-langchain-core==0.1.30
+langchain-core==0.1.31
 pydantic==2.6.3
 pydantic-settings==2.2.1
 python-dotenv==1.0.1
