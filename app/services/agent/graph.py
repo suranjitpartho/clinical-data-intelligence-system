@@ -37,12 +37,28 @@ class ClinicalGraph:
     def _create_workflow(self):
         graph = StateGraph(AgentState)
         
-        # Add Nodes with LLM dependency injected where needed
-        graph.add_node("rewrite", lambda state, config: rewrite_node(state, config, self.llm))
-        graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
-        graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
+        # Add Nodes with explicit names for tracking
+        def rewrite_step(state, config):
+            from app.services.agent.nodes.query import rewrite_node
+            return rewrite_node(state, config, self.llm)
+            
+        def classify_step(state, config):
+            from app.services.agent.nodes.query import intent_node
+            return intent_node(state, config, self.llm)
+            
+        def sql_step(state, config):
+            from app.services.agent.nodes.tools import sql_node
+            return sql_node(state, config, self.llm)
+            
+        def synthesis_step(state, config):
+            from app.services.agent.nodes.answer import synthesis_node
+            return synthesis_node(state, config, self.llm)
+
+        graph.add_node("rewrite", rewrite_step)
+        graph.add_node("classify", classify_step)
+        graph.add_node("sql_tool", sql_step)
         graph.add_node("rag_tool", rag_node)
-        graph.add_node("synthesis", lambda state, config: synthesis_node(state, config, self.llm))
+        graph.add_node("synthesis", synthesis_step)
         
         # Add Edges
         graph.set_entry_point("rewrite")

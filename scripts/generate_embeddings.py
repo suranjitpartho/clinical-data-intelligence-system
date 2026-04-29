@@ -8,22 +8,12 @@ from app.models.clinical import ClinicalNote
 from tqdm import tqdm
 
 def run_embeddings():
-    # 1. Initialize the local model
-    print("Loading local AI model (BAAI/bge-m3)...")
-    # This will download the model on the first run (roughly 1.2GB)
-    model = SentenceTransformer('BAAI/bge-m3')
-    
-    # Use Metal (MPS) if available on Mac M5, otherwise CPU
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    model.to(device)
-    print(f"Using device: {device.upper()}")
-
     db = SessionLocal()
     try:
         from app.models.core import Patient, Department
-        from app.models.clinical import Appointment
+        from app.models.clinical import Appointment, ClinicalGuideline
         
-        # 2. Fetch notes that don't have vectors yet, with joined context
+        # 1. Fetch notes that don't have vectors yet
         notes_to_process = (
             db.query(ClinicalNote)
             .join(Appointment, ClinicalNote.appointment_id == Appointment.id)
@@ -32,6 +22,19 @@ def run_embeddings():
             .filter(ClinicalNote.vector == None)
             .all()
         )
+        
+        guidelines_to_process = db.query(ClinicalGuideline).filter(ClinicalGuideline.vector == None).all()
+
+        if not notes_to_process and not guidelines_to_process:
+            print("✅ All clinical data and guidelines already have embeddings. Skipping AI model load.")
+            return
+
+        # 2. ONLY NOW load the model (roughly 1.2GB)
+        print("🧠 New notes found. Loading local AI model (BAAI/bge-m3)...")
+        model = SentenceTransformer('BAAI/bge-m3')
+        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        model.to(device)
+        print(f"Using device: {device.upper()}")
         
         if not notes_to_process:
             print("No new clinical notes to process.")
