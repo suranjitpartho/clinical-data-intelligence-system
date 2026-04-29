@@ -99,7 +99,8 @@ function App() {
         content: response.data.final_answer,
         data: response.data.data_results,
         nextStep: response.data.next_step,
-        logs: response.data.logs
+        logs: response.data.logs,
+        isError: response.data.is_error
       };
       
       setMessages(prev => [...prev, aiResponse]);
@@ -108,7 +109,11 @@ function App() {
       }
       await fetchAnalytics();
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'ai', content: "Error: Could not connect to the Clinical Intelligence backend." }]);
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        content: "Error: Could not connect to the Clinical Intelligence backend.",
+        isError: true 
+      }]);
     } finally {
       setIsLoading(false);
     }

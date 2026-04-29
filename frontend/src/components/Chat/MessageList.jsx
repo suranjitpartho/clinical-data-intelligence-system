@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, Search, Brain } from 'lucide-react';
+import { Database, Search, Brain, AlertCircle } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
 
@@ -21,8 +21,19 @@ const MessageList = ({ messages, isLoading, scrollRef, setIsTraceOpen, setTraceL
         <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
           <div className={`max-w-[85%] space-y-2 ${msg.role === 'ai' ? 'animate-fade-in-up' : ''}`}>
               {msg.content && (
-                <div className={msg.role === 'user' ? 'chat-bubble-user' : 'py-2 px-1'}>
-                  <div className={`prose-container max-w-none ${msg.role === 'ai' ? 'text-dark-grey' : 'text-white'}`}>
+                <div className={
+                  msg.role === 'user' 
+                    ? 'chat-bubble-user' 
+                    : msg.isError 
+                      ? 'py-3 px-4 rounded-xl bg-red-50/50 border border-red-100/50 text-red-900 flex gap-3 items-start'
+                      : 'py-2 px-1'
+                }>
+                  {msg.isError && <AlertCircle className="text-red-500 mt-1 shrink-0" size={18} />}
+                  <div className={`prose-container max-w-none ${
+                    msg.role === 'ai' 
+                      ? (msg.isError ? 'text-red-800' : 'text-dark-grey') 
+                      : 'text-white'
+                  } ${msg.content?.includes("Rate Limit Reached") ? 'text-[13px] italic opacity-90' : ''}`}>
                     {msg.role === 'ai' ? (
                       renderMarkdown(msg.content)
                     ) : (

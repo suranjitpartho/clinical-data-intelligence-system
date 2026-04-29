@@ -4,6 +4,7 @@ from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.services.agent.state import AgentState
+from app.services.schema_introspector import get_fk_relationship_map
 from app.services.prompts import (
     SQL_GENERATION_PROMPT, 
     DISCOVERY_PROMPT, 
@@ -42,8 +43,17 @@ def sql_node(state: AgentState, config, llm):
     except Exception as e:
         discovery_context += f"Discovery failed: {e}\n"
     
+    # --- Dynamic FK Relationship Map (auto-generated from DB schema) ---
+    fk_map = get_fk_relationship_map()
+    fk_context = f"\n[DATABASE FOREIGN KEY RELATIONSHIPS - Source of Truth for all JOINs]:\n{fk_map}\n"
+
     # We keep discovery_context for internal prompt use only, not for user logs
-    sql_prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context).replace("{error_context}", error_context)
+    sql_prompt = (
+        SQL_GENERATION_PROMPT
+        .replace("{query}", query)
+        .replace("{discovery_context}", fk_context + discovery_context)
+        .replace("{error_context}", error_context)
+    )
     response_content = llm.invoke(sql_prompt, config).content.strip()
 
     # Extract reasoning thought block
@@ -51,6 +61,8 @@ def sql_node(state: AgentState, config, llm):
     if "<thought>" in response_content and "</thought>" in response_content:
         thought_block = response_content.split("<thought>")[1].split("</thought>")[0].strip()
     
+    
+
     # 1. Precise Extraction: Split by the </thought> tag to isolate the code area
     if "</thought>" in response_content:
         potential_sql = response_content.split("</thought>")[-1].strip()
@@ -62,76 +74,77 @@ def sql_node(state: AgentState, config, llm):
     if sql_blocks:
         sql = sql_blocks[-1].strip()
     else:
-        # Fallback: Find 'WITH' or 'SELECT' at the start of a line in the potential SQL area
-        lines = potential_sql.split("\n")
-        cleaned_lines = []
-        found_start = False
-        for line in lines:
-            upper_line = line.strip().upper()
-            if not found_start and (upper_line.startswith("SELECT ") or upper_line.startswith("WITH ")):
-                found_start = True
-            if found_start:
-                cleaned_lines.append(line)
-        sql = "\n".join(cleaned_lines).strip()
-        
-        # Final desperate fallback
-        if not sql:
-            sql_match = re.findall(r'(?:WITH|SELECT).*?;', potential_sql, re.DOTALL | re.IGNORECASE)
-            if sql_match:
-                sql = sql_match[-1].strip()
-            else:
-                sql = potential_sql
-            
+        sql = potential_sql.strip()
+
     # Final cleanup of any lingering backticks or bold markers
     sql = sql.replace("```sql", "").replace("```", "").strip()
     
-    # Precise Trim: Ensure we don't have conversational headers before the code
-    # We find the first line that contains our identified starting keyword
-    sql_lines = sql.split("\n")
-    cleaned_lines = []
-    found_start = False
-    for line in sql_lines:
-        if not found_start and ("SELECT " in line.upper() or "WITH " in line.upper()):
-            found_start = True
-        if found_start:
-            cleaned_lines.append(line)
-    sql = "\n".join(cleaned_lines).strip()
+    # --- Precise Code Isolation ---
+    # Find the FIRST occurrence of WITH or SELECT that isn't preceded by letters (start of command)
+    # We use a non-greedy catch-all to ensure we get the whole query
+    match = re.search(r'\b(WITH|SELECT)\b', sql, re.IGNORECASE)
+    if match:
+        sql = sql[match.start():].strip()
+    
+    # Remove any trailing conversational text after the semicolon
+    if ";" in sql:
+        sql = sql.split(";")[0] + ";"
     
     # SAFETY NET: If the LLM completely failed to generate a SELECT query, stop here.
     if not sql.upper().startswith("SELECT") and not sql.upper().startswith("WITH"):
         return {
             **state,
             "error_count": error_count + 1,
+            "data_results": [], # Clear old data
+            "data_metadata": {"total_count": 0, "columns": [], "error": "SQL_EXTRACTION_FAILED"},
             "tool_query": "ERROR: The AI failed to generate a valid SQL query.",
-            "logs": "\nERROR: Context window exhausted or LLM failed to output SQL."
+            "logs": "\nERROR: Could not isolate a valid SQL SELECT or WITH statement."
         }
     
     
     try:
         results = session.execute(text(sql)).fetchall()
-        data = [dict(row._mapping) for row in results]
-        session.close() # Clean up
+        # Limit the data returned to the LLM for performance, but keep the total count
+        raw_data = [dict(row._mapping) for row in results]
+        session.close() 
         
-        # THE TRUE REASONING TRACE: Only show original reasoning to the user
+        # --- Structured Tool Response ---
+        total_count = len(raw_data)
+        schema = list(raw_data[0].keys()) if raw_data else []
+        
+        # We only pass a manageable subset to the synthesis layer
+        display_data = raw_data[:50] 
+        
+        metadata = {
+            "total_count": total_count,
+            "columns": schema,
+            "truncated": total_count > 50
+        }
+        
         final_trace = thought_block if thought_block else "Analyzing database for clinical patterns..."
         
         return {
             **state, 
-            "data_results": data, 
+            "data_results": display_data, 
+            "data_metadata": metadata,
             "tool_query": sql, 
             "logs": "\n" + final_trace
         }
     except Exception as e:
         session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
         session.close()
+        
         # Truncate large SQL in logs to keep the Reason Trace readable
         sql_snippet = sql[:200] + "..." if len(sql) > 200 else sql
         error_msg = f"\nERROR at attempt {error_count+1}: {str(e)[:150]}...\n[SQL Snippet]: {sql_snippet}"
         
+        # Explicitly inform the state of the failure
         return {
             **state, 
             "error_count": error_count + 1, 
-            "tool_query": f"ERROR: {str(e)}\nSQL attempt: {sql}",
+            "data_results": [],
+            "data_metadata": {"total_count": 0, "columns": [], "error": str(e)},
+            "tool_query": f"ERROR: {str(e)}",
             "logs": error_msg
         }
 

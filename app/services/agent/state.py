@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     tools_needed: List[str]
     tool_query: Optional[str]
     data_results: List[Dict]
+    data_metadata: Dict      # Structured metadata from the SQL tool (total_count, columns, error)
     medical_context: List[str] # For RAG snippets
     final_answer: Optional[str]
     error_count: int

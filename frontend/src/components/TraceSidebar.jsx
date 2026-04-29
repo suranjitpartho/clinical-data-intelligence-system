@@ -3,20 +3,11 @@ import { X, Brain, Info } from 'lucide-react';
 
 const TraceSidebar = ({ isOpen, setIsOpen, logs }) => {
   return (
-    <>
-      {/* Backdrop for click-outside-to-close */}
-      <div 
-        className={`fixed inset-0 bg-black/5 transition-opacity duration-500 z-40 ${
-          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-        onClick={() => setIsOpen(false)}
-      />
-
-      <div 
-        className={`fixed top-0 right-0 h-full w-[400px] bg-white border-l border-gray-100 shadow-2xl transition-transform duration-500 ease-in-out z-50 flex flex-col ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
+    <div 
+      className={`h-full bg-white border-l border-gray-100 transition-all duration-500 ease-in-out flex flex-col overflow-hidden ${
+        isOpen ? 'w-[400px]' : 'w-0 border-l-0'
+      }`}
+    >
       {/* Header */}
       <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-white">
         <div className="flex items-center gap-3">
@@ -63,7 +54,6 @@ const TraceSidebar = ({ isOpen, setIsOpen, logs }) => {
         )}
       </div>
     </div>
-    </>
   );
 };
 

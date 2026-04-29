@@ -15,6 +15,7 @@ from app.services.agent.nodes.answer import synthesis_node
 
 class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
+        self.model_name = model_name or "default-model"
         self.llm = get_llm(provider, model_name)
         self.memory = MemorySaver()
         self.workflow = self._create_workflow()
@@ -34,31 +35,31 @@ class ClinicalGraph:
             return "rag"
         return "continue"
 
+    def _rewrite_step(self, state, config):
+        from app.services.agent.nodes.query import rewrite_node
+        return rewrite_node(state, config, self.llm)
+        
+    def _classify_step(self, state, config):
+        from app.services.agent.nodes.query import intent_node
+        return intent_node(state, config, self.llm)
+        
+    def _sql_step(self, state, config):
+        from app.services.agent.nodes.tools import sql_node
+        return sql_node(state, config, self.llm)
+        
+    def _synthesis_step(self, state, config):
+        from app.services.agent.nodes.answer import synthesis_node
+        return synthesis_node(state, config, self.llm)
+
     def _create_workflow(self):
         graph = StateGraph(AgentState)
         
         # Add Nodes with explicit names for tracking
-        def rewrite_step(state, config):
-            from app.services.agent.nodes.query import rewrite_node
-            return rewrite_node(state, config, self.llm)
-            
-        def classify_step(state, config):
-            from app.services.agent.nodes.query import intent_node
-            return intent_node(state, config, self.llm)
-            
-        def sql_step(state, config):
-            from app.services.agent.nodes.tools import sql_node
-            return sql_node(state, config, self.llm)
-            
-        def synthesis_step(state, config):
-            from app.services.agent.nodes.answer import synthesis_node
-            return synthesis_node(state, config, self.llm)
-
-        graph.add_node("rewrite", rewrite_step)
-        graph.add_node("classify", classify_step)
-        graph.add_node("sql_tool", sql_step)
+        graph.add_node("rewrite", self._rewrite_step)
+        graph.add_node("classify", self._classify_step)
+        graph.add_node("sql_tool", self._sql_step)
         graph.add_node("rag_tool", rag_node)
-        graph.add_node("synthesis", synthesis_step)
+        graph.add_node("synthesis", self._synthesis_step)
         
         # Add Edges
         graph.set_entry_point("rewrite")
@@ -103,13 +104,22 @@ class ClinicalGraph:
                 except Exception as e:
                     print(f"Warning: Failed to initialize Langfuse callback: {e}")
             
-            config = {"configurable": {"thread_id": thread_id}, "callbacks": callbacks}
+            config = {
+                "configurable": {"thread_id": thread_id}, 
+                "callbacks": callbacks,
+                "metadata": {
+                    "source": os.getenv("ENV", "development"), 
+                    "agent": "clinical-intelligence",
+                    "model": self.model_name
+                }
+            }
             initial_state = {
                 "query": query,
                 "messages": history or [],
                 "tools_needed": [],
                 "tool_query": None,
                 "data_results": [],
+                "data_metadata": {},
                 "medical_context": [],
                 "final_answer": None,
                 "error_count": 0,
@@ -147,9 +157,24 @@ class ClinicalGraph:
                 "data_results": final_output["data_results"],
                 "medical_context": final_output.get("medical_context", []),
                 "logs": final_output["logs"],
-                "history": new_messages
+                "history": new_messages,
+                "is_error": False
             }
         except Exception as e:
-            return {"final_answer": f"Graph Error: {str(e)}", "data_results": []}
+            error_msg = str(e)
+            # Handle Rate Limits (Groq/OpenAI/Anthropic)
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                friendly_msg = (
+                    "**Model Rate Limit Reached**: The current AI model has reached its daily or minute-level token limit. "
+                    "To continue your analysis without interruption, please switch to a different model or provider using the selection menu at the bottom of the left sidebar."
+                )
+                return {
+                    "final_answer": friendly_msg, 
+                    "data_results": [],
+                    "logs": f"Technical Details: {error_msg}",
+                    "is_error": True
+                }
+            
+            return {"final_answer": f"Graph Error: {error_msg}", "data_results": [], "is_error": True}
         finally:
             db.close()

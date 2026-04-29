@@ -16,10 +16,13 @@ export const renderMarkdown = (text) => {
       return <h2 key={i} className="text-clinical-blue font-bold text-xl mt-8 mb-3">{line.replace('##', '').trim()}</h2>;
     }
     
-    const parts = line.split(/(\*\*.*?\*\*)/g);
+    const parts = line.split(/(\*\*.*?\*\*|\*.*?\*)/g);
     const renderedLine = parts.map((part, j) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={j} className="font-bold text-dark-grey">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={j} className="italic">{part.slice(1, -1)}</em>;
       }
       return part;
     });
