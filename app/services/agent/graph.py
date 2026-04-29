@@ -119,6 +119,12 @@ class ClinicalGraph:
                 {"role": "assistant", "content": final_output["final_answer"]}
             ]
             
+            if callbacks:
+                try:
+                    callbacks[0].flush()
+                except Exception:
+                    pass
+            
             return {
                 "final_answer": final_output["final_answer"],
                 "next_step": ", ".join(final_output.get("tools_needed", [])),
@@ -130,9 +136,4 @@ class ClinicalGraph:
         except Exception as e:
             return {"final_answer": f"Graph Error: {str(e)}", "data_results": []}
         finally:
-            if 'callbacks' in locals() and callbacks:
-                try:
-                    callbacks[0].flush()
-                except Exception:
-                    pass
             db.close()
