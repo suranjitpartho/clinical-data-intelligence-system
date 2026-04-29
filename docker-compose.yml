@@ -6,3 +6,5 @@ services:
     env_file:
       - .env
     restart: always
+    tty: true
+    stdin_open: true

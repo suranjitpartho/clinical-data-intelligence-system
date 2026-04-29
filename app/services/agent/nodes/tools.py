@@ -10,7 +10,7 @@ from app.services.prompts import (
     DATA_DICTIONARY
 )
 
-def sql_node(state: AgentState, llm):
+def sql_node(state: AgentState, config, llm):
     query = state["query"]
     error_count = state.get("error_count", 0)
     session = SessionLocal() # Open fresh session for this node
@@ -23,7 +23,7 @@ def sql_node(state: AgentState, llm):
 
     # --- Discovery Loop (Active Tool Execution) ---
     discovery_prompt = DISCOVERY_PROMPT.replace("{query}", query).replace("{schema}", DATA_DICTIONARY)
-    discovery_res = llm.invoke(discovery_prompt).content
+    discovery_res = llm.invoke(discovery_prompt, config).content
     
     discovery_context = "--- ACTUAL DATABASE CATEGORIES ---\n"
     try:
@@ -44,7 +44,7 @@ def sql_node(state: AgentState, llm):
     
     # We keep discovery_context for internal prompt use only, not for user logs
     sql_prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context).replace("{error_context}", error_context)
-    response_content = llm.invoke(sql_prompt).content.strip()
+    response_content = llm.invoke(sql_prompt, config).content.strip()
 
     # Extract reasoning thought block
     thought_block = ""
@@ -103,7 +103,7 @@ def sql_node(state: AgentState, llm):
             **state,
             "error_count": error_count + 1,
             "tool_query": "ERROR: The AI failed to generate a valid SQL query.",
-            "logs": state.get("logs", "") + "\nERROR: Context window exhausted or LLM failed to output SQL."
+            "logs": "\nERROR: Context window exhausted or LLM failed to output SQL."
         }
     
     
@@ -119,7 +119,7 @@ def sql_node(state: AgentState, llm):
             **state, 
             "data_results": data, 
             "tool_query": sql, 
-            "logs": final_trace
+            "logs": "\n" + final_trace
         }
     except Exception as e:
         session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
@@ -132,7 +132,7 @@ def sql_node(state: AgentState, llm):
             **state, 
             "error_count": error_count + 1, 
             "tool_query": f"ERROR: {str(e)}\nSQL attempt: {sql}",
-            "logs": state.get("logs", "") + error_msg
+            "logs": error_msg
         }
 
 def rag_node(state: AgentState):

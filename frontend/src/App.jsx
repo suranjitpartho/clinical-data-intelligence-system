@@ -9,7 +9,7 @@ import ChatInput from './components/Chat/ChatInput';
 import TraceSidebar from './components/TraceSidebar';
 import AnalyticsView from './components/AnalyticsView';
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
 
 function App() {
   const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'

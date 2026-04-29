@@ -38,11 +38,11 @@ class ClinicalGraph:
         graph = StateGraph(AgentState)
         
         # Add Nodes with LLM dependency injected where needed
-        graph.add_node("rewrite", partial(rewrite_node, llm=self.llm))
-        graph.add_node("classify", partial(intent_node, llm=self.llm))
-        graph.add_node("sql_tool", partial(sql_node, llm=self.llm))
+        graph.add_node("rewrite", lambda state, config: rewrite_node(state, config, self.llm))
+        graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
+        graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
         graph.add_node("rag_tool", rag_node)
-        graph.add_node("synthesis", partial(synthesis_node, llm=self.llm))
+        graph.add_node("synthesis", lambda state, config: synthesis_node(state, config, self.llm))
         
         # Add Edges
         graph.set_entry_point("rewrite")
