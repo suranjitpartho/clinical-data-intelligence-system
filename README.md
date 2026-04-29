@@ -128,6 +128,11 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 └── requirements.txt   # Backend dependencies
 ```
 
+### System Requirements
+* **RAM:** Minimum 4GB (8GB recommended for local AI execution).
+* **Disk Space:** ~5GB for Docker images and local model storage.
+* **Docker:** Ensure at least 4GB of memory is allocated to Docker.
+
 <br>
 
 ## Installation & Setup
