@@ -39,6 +39,7 @@
 | **Hybrid Retrieval** | Combines exact lab results with semantic insights from clinical notes. |
 | **Observability Trace** | Provides node-level transparency for latency, token density, and financial cost. |
 | **Contextual Rewrite** | Maintains diagnostic accuracy in multi-turn conversations by resolving pronouns. |
+| **Dimensional Enrichment** | Automatically fetches medical reference ranges (e.g., lab thresholds) to ground AI synthesis in clinical truth. |
 
 <br>
 
@@ -96,6 +97,9 @@ To provide a 360-degree patient view, the system implements a *multi-modal retri
 ✴️ **Challenge: SQL Hallucination & Syntactic Errors → Solution: Proactive Discovery & Self-Correction**  
 To guarantee precision, the system employs *Proactive Schema Discovery* guided by a *schema-aware data dictionary*. Before generating SQL, the agent consults a custom knowledge map that defines complex clinical relationships and business rules (e.g., precise age-calculation logic). It then fetches real-time categorical values from the database to ensure the query is perfectly grounded in live data. If a query fails, an autonomous *Self-Correction Loop* captures the database error and feeds it back to the agent for an immediate, self-healing rewrite.
 
+✴️ **Challenge: Context Loss in Aggregated SQL → Solution: Automated Dimensional Enrichment**  
+Aggregating data (e.g., averages) often "squashes" clinical context like reference ranges. I engineered a *Metadata-Driven Enrichment Layer* that dynamically injects a separate "Dimensional Context" payload into the synthesis layer. This allows the AI to interpret results against clinical ground truth even for highly aggregated queries.
+
 <br>
 
 ## Technical Rationale: Why This Stack?
@@ -103,7 +107,7 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 *   **LangGraph over LangChain**: Unlike standard chains, LangGraph provides the fine-grained control over *cycles and state* required for a non-linear clinical diagnostic flow.
 *   **PostgreSQL + pgvector over Pinecone**: By using pgvector, the system can execute complex SQL joins and semantic vector searches natively within the same database environment. This unified storage ensures data consistency and allows dynamic context passing (e.g., using SQL results to immediately filter vector searches) without relying on external vector databases.
 *   **FastAPI over Django**: Chosen for its high-performance asynchronous capabilities, efficiently orchestrating multiple concurrent LLM calls to deliver near real-time responses critical for medical consultation environments.
-*   **Advanced Prompt Strategy**: Utilizes *Dynamic Context Injection* and *Few-Shot Clinical Examples*. The system programmatically assembles prompts by combining the User Query, the Data Dictionary, and real-time database categories, ensuring the LLM operates with "Ground Truth" rather than relying on internal weights.
+*   **Langfuse over LangSmith**: Chosen for its open-source, self-hostable architecture which is essential for clinical data privacy and HIPAA compliance. Unlike SaaS-only alternatives, Langfuse allows the clinic to maintain full ownership of its telemetry data while providing granular, 5-decimal micro-billing and node-level latency tracking.
 
 <br>
 
