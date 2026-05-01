@@ -10,7 +10,7 @@ from app.services.agent.provider import get_llm
 
 # Import nodes
 from app.services.agent.nodes.query import rewrite_node, intent_node
-from app.services.agent.nodes.tools import sql_node, rag_node, should_retry_sql
+from app.services.agent.nodes.tools import sql_node, rag_node
 from app.services.agent.nodes.answer import synthesis_node
 
 class ClinicalGraph:
@@ -35,31 +35,15 @@ class ClinicalGraph:
             return "rag"
         return "continue"
 
-    def _rewrite_step(self, state, config):
-        from app.services.agent.nodes.query import rewrite_node
-        return rewrite_node(state, config, self.llm)
-        
-    def _classify_step(self, state, config):
-        from app.services.agent.nodes.query import intent_node
-        return intent_node(state, config, self.llm)
-        
-    def _sql_step(self, state, config):
-        from app.services.agent.nodes.tools import sql_node
-        return sql_node(state, config, self.llm)
-        
-    def _synthesis_step(self, state, config):
-        from app.services.agent.nodes.answer import synthesis_node
-        return synthesis_node(state, config, self.llm)
-
     def _create_workflow(self):
         graph = StateGraph(AgentState)
         
         # Add Nodes with explicit names for tracking
-        graph.add_node("rewrite", self._rewrite_step)
-        graph.add_node("classify", self._classify_step)
-        graph.add_node("sql_tool", self._sql_step)
+        graph.add_node("rewrite", lambda state, config: rewrite_node(state, config, self.llm))
+        graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
+        graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
         graph.add_node("rag_tool", rag_node)
-        graph.add_node("synthesis", self._synthesis_step)
+        graph.add_node("synthesis", lambda state, config: synthesis_node(state, config, self.llm))
         
         # Add Edges
         graph.set_entry_point("rewrite")

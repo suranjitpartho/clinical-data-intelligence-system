@@ -57,6 +57,10 @@
   },
   "medical_supplies": {
     "concept": "Inventory management for clinical consumables and equipment. Stock is managed at the department level — the same item can appear in multiple departments with different quantities. Facility-wide stock for any item is the sum across all departments. When quantity falls below the reorder level, that department needs restocking. Supply costs contribute to departmental operating expenses.",
+    "reference_columns": [
+      "item_name",
+      "reorder_level"
+    ],
     "columns_with_descriptions": {
       "id": "Unique stock record identifier.",
       "item_name": "Name of the clinical product or consumable.",
@@ -68,7 +72,11 @@
     }
   },
   "lab_results": {
-    "concept": "Pathology and diagnostic test data. Each row represents a single test result from a specific visit. A patient can have multiple lab results from a single appointment (e.g., Glucose, HbA1c, and CBC all ordered in one visit). The is_abnormal flag is the primary clinical signal for identifying patients who need follow-up care. Lab results are always linked to an appointment, which in turn links to the patient and doctor.",
+    "concept": "Pathology and diagnostic test data. Each row represents a single test result from a specific visit. A patient can have multiple lab results from a single appointment. The is_abnormal flag is the primary clinical signal for identifying patients who need follow-up care. Lab results are always linked to an appointment, which in turn links to the patient and doctor.",
+    "reference_columns": [
+      "test_name",
+      "reference_range"
+    ],
     "columns_with_descriptions": {
       "id": "Unique test result record.",
       "appointment_id": "The appointment during which this test was ordered and recorded.",
@@ -80,6 +88,10 @@
   },
   "prescriptions": {
     "concept": "Pharmacotherapy records. Each row is one medication prescribed during a specific visit. A single appointment can generate multiple prescriptions. Prescriptions are the record of the clinic's pharmacological treatment decisions and are useful for analysing medication patterns, polypharmacy risks, and treatment adherence.",
+    "reference_columns": [
+      "medication",
+      "dosage"
+    ],
     "columns_with_descriptions": {
       "id": "Unique prescription record.",
       "appointment_id": "The appointment during which this medication was prescribed.",

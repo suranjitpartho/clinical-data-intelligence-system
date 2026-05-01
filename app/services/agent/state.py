@@ -14,7 +14,7 @@ class AgentState(TypedDict):
     data_results: List[Dict]
     data_metadata: Dict      # Structured metadata from the SQL tool (total_count, columns, error)
     medical_context: List[str] # For RAG snippets
+    reference_context: Dict    # Dictionary of table-specific context (e.g. lab ranges)
     final_answer: Optional[str]
     error_count: int
     logs: str
-    db_session: any

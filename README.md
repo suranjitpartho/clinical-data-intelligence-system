@@ -76,7 +76,7 @@ The system is built on a modular, state-managed architecture designed for high a
 | **Orchestration** | **LangGraph** | Managing state-based clinical reasoning and tool loops. |
 | **Knowledge Layer** | **Data Dictionary** | Mapping natural language to complex clinical business logic. |
 | **Observability** | **Langfuse** | Capturing LLM latency, token usage, and graph execution traces. |
-| **API Backend** | **FastAPI** | Providing high-concurrency, sub-second response times. |
+| **API Backend** | **FastAPI** | Providing high-concurrency, asynchronous API endpoints. |
 | **Knowledge Base** | **pgvector** | Storing medical narratives and protocol embeddings. |
 | **Modern UI** | **React 19** | Delivering a transparent "Reasoning Trace" for clinician trust. |
 
@@ -101,8 +101,8 @@ To guarantee precision, the system employs *Proactive Schema Discovery* guided b
 ## Technical Rationale: Why This Stack?
 
 *   **LangGraph over LangChain**: Unlike standard chains, LangGraph provides the fine-grained control over *cycles and state* required for a non-linear clinical diagnostic flow.
-*   **PostgreSQL + pgvector over Pinecone**: By using pgvector, the system can perform complex SQL joins and semantic vector searches within a *single transaction*, ensuring data consistency between structured records and clinical notes.
-*   **FastAPI over Django**: Chosen for its high-performance asynchronous capabilities, enabling the sub-second response times critical for real-time medical consultation environments.
+*   **PostgreSQL + pgvector over Pinecone**: By using pgvector, the system can execute complex SQL joins and semantic vector searches natively within the same database environment. This unified storage ensures data consistency and allows dynamic context passing (e.g., using SQL results to immediately filter vector searches) without relying on external vector databases.
+*   **FastAPI over Django**: Chosen for its high-performance asynchronous capabilities, efficiently orchestrating multiple concurrent LLM calls to deliver near real-time responses critical for medical consultation environments.
 *   **Advanced Prompt Strategy**: Utilizes *Dynamic Context Injection* and *Few-Shot Clinical Examples*. The system programmatically assembles prompts by combining the User Query, the Data Dictionary, and real-time database categories, ensuring the LLM operates with "Ground Truth" rather than relying on internal weights.
 
 <br>

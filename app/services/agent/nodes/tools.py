@@ -8,7 +8,8 @@ from app.services.schema_introspector import get_fk_relationship_map
 from app.services.prompts import (
     SQL_GENERATION_PROMPT, 
     DISCOVERY_PROMPT, 
-    DATA_DICTIONARY
+    DATA_DICTIONARY,
+    DATA_DICTIONARY_JSON
 )
 
 def sql_node(state: AgentState, config, llm):
@@ -92,10 +93,11 @@ def sql_node(state: AgentState, config, llm):
     
     # SAFETY NET: If the LLM completely failed to generate a SELECT query, stop here.
     if not sql.upper().startswith("SELECT") and not sql.upper().startswith("WITH"):
+        session.close()  # FIX: close session to prevent connection leak
         return {
             **state,
             "error_count": error_count + 1,
-            "data_results": [], # Clear old data
+            "data_results": [],
             "data_metadata": {"total_count": 0, "columns": [], "error": "SQL_EXTRACTION_FAILED"},
             "tool_query": "ERROR: The AI failed to generate a valid SQL query.",
             "logs": "\nERROR: Could not isolate a valid SQL SELECT or WITH statement."
@@ -106,6 +108,24 @@ def sql_node(state: AgentState, config, llm):
         results = session.execute(text(sql)).fetchall()
         # Limit the data returned to the LLM for performance, but keep the total count
         raw_data = [dict(row._mapping) for row in results]
+        
+        # --- Automated Dimensional Enrichment ---
+        reference_context = {}
+        # Find tables mentioned in the SQL
+        tables_found = re.findall(r'\b(?:FROM|JOIN)\s+([a-zA-Z0-9_]+)\b', sql, re.IGNORECASE)
+        
+        for table in set(t.lower() for t in tables_found):
+            # Check if this table has reference columns defined in our Data Dictionary
+            table_meta = DATA_DICTIONARY_JSON.get(table)
+            if table_meta and "reference_columns" in table_meta:
+                ref_cols = ", ".join(table_meta["reference_columns"])
+                ref_sql = f"SELECT DISTINCT {ref_cols} FROM {table}"
+                try:
+                    ref_res = session.execute(text(ref_sql)).fetchall()
+                    reference_context[table] = [dict(r._mapping) for r in ref_res]
+                except Exception:
+                    continue # Silently fail if ref query fails to avoid crashing main flow
+
         session.close() 
         
         # --- Structured Tool Response ---
@@ -113,12 +133,12 @@ def sql_node(state: AgentState, config, llm):
         schema = list(raw_data[0].keys()) if raw_data else []
         
         # We only pass a manageable subset to the synthesis layer
-        display_data = raw_data[:50] 
+        display_data = raw_data[:25] 
         
         metadata = {
             "total_count": total_count,
             "columns": schema,
-            "truncated": total_count > 50
+            "truncated": total_count > 25
         }
         
         final_trace = thought_block if thought_block else "Analyzing database for clinical patterns..."
@@ -127,6 +147,7 @@ def sql_node(state: AgentState, config, llm):
             **state, 
             "data_results": display_data, 
             "data_metadata": metadata,
+            "reference_context": reference_context, # Pass context to synthesis
             "tool_query": sql, 
             "logs": "\n" + final_trace
         }
@@ -152,21 +173,20 @@ def rag_node(state: AgentState):
     session = SessionLocal()
     search_query = state["query"]
     
-    # Context Injection (Context Collision Fix)
-    # If SQL already found specific people, inject their names into the vector search
+    # Context Enrichment: If SQL already retrieved records, summarise them generically
+    # to focus the vector search — no hardcoded field names, works for any table schema
     if state.get("data_results") and isinstance(state["data_results"], list):
-        names = []
-        for row in state["data_results"]:
+        rows = state["data_results"][:5]
+        row_snippets = []
+        for row in rows:
             if isinstance(row, dict):
-                if "first_name" in row and "last_name" in row:
-                    names.append(f"{row['first_name']} {row['last_name']}")
-                elif "patient_name" in row:
-                    names.append(str(row["patient_name"]))
-        
-        # Deduplicate and limit to prevent massive vector queries
-        names = list(set(names))[:5]
-        if names:
-            search_query += f". Specific focus on patients: {', '.join(names)}"
+                # Serialize each row as "key: value" pairs, ignore nulls
+                row_text = ", ".join(
+                    f"{k}: {v}" for k, v in row.items() if v is not None
+                )
+                row_snippets.append(row_text)
+        if row_snippets:
+            search_query += f". Related records: {'; '.join(row_snippets[:3])[:300]}"
 
     data = get_clinical_notes_semantic(session, search_query)
     session.close()
@@ -181,8 +201,3 @@ def rag_node(state: AgentState):
         "tool_query": "Semantic Search on Clinical Notes",
         "logs": state.get("logs", "")
     }
-
-def should_retry_sql(state: AgentState):
-    if "ERROR" in (state["tool_query"] or "") and state["error_count"] < 2:
-        return "retry"
-    return "continue"
