@@ -630,6 +630,14 @@ def seed_guidelines(db: Session):
 def run_seeding():
     db = SessionLocal()
     try:
+        # Check if data already exists to avoid redundant seeding
+        from app.models.core import Patient
+        patient_count = db.query(Patient).count()
+        if patient_count > 0:
+            print(f"✅ Database already contains {patient_count} patients. Skipping seeding to save time.")
+            return
+
+        print("🏥 Database is empty. Starting clinical simulation seeding...")
         clear_db()
         depts = seed_departments(db)
         staff = seed_staff(db, depts)

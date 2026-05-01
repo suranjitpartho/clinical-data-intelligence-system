@@ -10,11 +10,12 @@ from app.services.agent.provider import get_llm
 
 # Import nodes
 from app.services.agent.nodes.query import rewrite_node, intent_node
-from app.services.agent.nodes.tools import sql_node, rag_node, should_retry_sql
+from app.services.agent.nodes.tools import sql_node, rag_node
 from app.services.agent.nodes.answer import synthesis_node
 
 class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
+        self.model_name = model_name or "default-model"
         self.llm = get_llm(provider, model_name)
         self.memory = MemorySaver()
         self.workflow = self._create_workflow()
@@ -37,12 +38,12 @@ class ClinicalGraph:
     def _create_workflow(self):
         graph = StateGraph(AgentState)
         
-        # Add Nodes with LLM dependency injected where needed
-        graph.add_node("rewrite", partial(rewrite_node, llm=self.llm))
-        graph.add_node("classify", partial(intent_node, llm=self.llm))
-        graph.add_node("sql_tool", partial(sql_node, llm=self.llm))
+        # Add Nodes with explicit names for tracking
+        graph.add_node("rewrite", lambda state, config: rewrite_node(state, config, self.llm))
+        graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
+        graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
         graph.add_node("rag_tool", rag_node)
-        graph.add_node("synthesis", partial(synthesis_node, llm=self.llm))
+        graph.add_node("synthesis", lambda state, config: synthesis_node(state, config, self.llm))
         
         # Add Edges
         graph.set_entry_point("rewrite")
@@ -87,13 +88,22 @@ class ClinicalGraph:
                 except Exception as e:
                     print(f"Warning: Failed to initialize Langfuse callback: {e}")
             
-            config = {"configurable": {"thread_id": thread_id}, "callbacks": callbacks}
+            config = {
+                "configurable": {"thread_id": thread_id}, 
+                "callbacks": callbacks,
+                "metadata": {
+                    "source": os.getenv("ENV", "development"), 
+                    "agent": "clinical-intelligence",
+                    "model": self.model_name
+                }
+            }
             initial_state = {
                 "query": query,
                 "messages": history or [],
                 "tools_needed": [],
                 "tool_query": None,
                 "data_results": [],
+                "data_metadata": {},
                 "medical_context": [],
                 "final_answer": None,
                 "error_count": 0,
@@ -119,20 +129,36 @@ class ClinicalGraph:
                 {"role": "assistant", "content": final_output["final_answer"]}
             ]
             
+            if callbacks:
+                try:
+                    callbacks[0].flush()
+                except Exception:
+                    pass
+            
             return {
                 "final_answer": final_output["final_answer"],
                 "next_step": ", ".join(final_output.get("tools_needed", [])),
                 "data_results": final_output["data_results"],
                 "medical_context": final_output.get("medical_context", []),
                 "logs": final_output["logs"],
-                "history": new_messages
+                "history": new_messages,
+                "is_error": False
             }
         except Exception as e:
-            return {"final_answer": f"Graph Error: {str(e)}", "data_results": []}
+            error_msg = str(e)
+            # Handle Rate Limits (Groq/OpenAI/Anthropic)
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                friendly_msg = (
+                    "**Model Rate Limit Reached**: The current AI model has reached its daily or minute-level token limit. "
+                    "To continue your analysis without interruption, please switch to a different model or provider using the selection menu at the bottom of the left sidebar."
+                )
+                return {
+                    "final_answer": friendly_msg, 
+                    "data_results": [],
+                    "logs": f"Technical Details: {error_msg}",
+                    "is_error": True
+                }
+            
+            return {"final_answer": f"Graph Error: {error_msg}", "data_results": [], "is_error": True}
         finally:
-            if 'callbacks' in locals() and callbacks:
-                try:
-                    callbacks[0].flush()
-                except Exception:
-                    pass
             db.close()

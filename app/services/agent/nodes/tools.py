@@ -4,13 +4,15 @@ from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.services.agent.state import AgentState
+from app.services.schema_introspector import get_fk_relationship_map
 from app.services.prompts import (
     SQL_GENERATION_PROMPT, 
     DISCOVERY_PROMPT, 
-    DATA_DICTIONARY
+    DATA_DICTIONARY,
+    DATA_DICTIONARY_JSON
 )
 
-def sql_node(state: AgentState, llm):
+def sql_node(state: AgentState, config, llm):
     query = state["query"]
     error_count = state.get("error_count", 0)
     session = SessionLocal() # Open fresh session for this node
@@ -23,7 +25,7 @@ def sql_node(state: AgentState, llm):
 
     # --- Discovery Loop (Active Tool Execution) ---
     discovery_prompt = DISCOVERY_PROMPT.replace("{query}", query).replace("{schema}", DATA_DICTIONARY)
-    discovery_res = llm.invoke(discovery_prompt).content
+    discovery_res = llm.invoke(discovery_prompt, config).content
     
     discovery_context = "--- ACTUAL DATABASE CATEGORIES ---\n"
     try:
@@ -42,15 +44,26 @@ def sql_node(state: AgentState, llm):
     except Exception as e:
         discovery_context += f"Discovery failed: {e}\n"
     
+    # --- Dynamic FK Relationship Map (auto-generated from DB schema) ---
+    fk_map = get_fk_relationship_map()
+    fk_context = f"\n[DATABASE FOREIGN KEY RELATIONSHIPS - Source of Truth for all JOINs]:\n{fk_map}\n"
+
     # We keep discovery_context for internal prompt use only, not for user logs
-    sql_prompt = SQL_GENERATION_PROMPT.replace("{query}", query).replace("{discovery_context}", discovery_context).replace("{error_context}", error_context)
-    response_content = llm.invoke(sql_prompt).content.strip()
+    sql_prompt = (
+        SQL_GENERATION_PROMPT
+        .replace("{query}", query)
+        .replace("{discovery_context}", fk_context + discovery_context)
+        .replace("{error_context}", error_context)
+    )
+    response_content = llm.invoke(sql_prompt, config).content.strip()
 
     # Extract reasoning thought block
     thought_block = ""
     if "<thought>" in response_content and "</thought>" in response_content:
         thought_block = response_content.split("<thought>")[1].split("</thought>")[0].strip()
     
+    
+
     # 1. Precise Extraction: Split by the </thought> tag to isolate the code area
     if "</thought>" in response_content:
         potential_sql = response_content.split("</thought>")[-1].strip()
@@ -62,98 +75,118 @@ def sql_node(state: AgentState, llm):
     if sql_blocks:
         sql = sql_blocks[-1].strip()
     else:
-        # Fallback: Find 'WITH' or 'SELECT' at the start of a line in the potential SQL area
-        lines = potential_sql.split("\n")
-        cleaned_lines = []
-        found_start = False
-        for line in lines:
-            upper_line = line.strip().upper()
-            if not found_start and (upper_line.startswith("SELECT ") or upper_line.startswith("WITH ")):
-                found_start = True
-            if found_start:
-                cleaned_lines.append(line)
-        sql = "\n".join(cleaned_lines).strip()
-        
-        # Final desperate fallback
-        if not sql:
-            sql_match = re.findall(r'(?:WITH|SELECT).*?;', potential_sql, re.DOTALL | re.IGNORECASE)
-            if sql_match:
-                sql = sql_match[-1].strip()
-            else:
-                sql = potential_sql
-            
+        sql = potential_sql.strip()
+
     # Final cleanup of any lingering backticks or bold markers
     sql = sql.replace("```sql", "").replace("```", "").strip()
     
-    # Precise Trim: Ensure we don't have conversational headers before the code
-    # We find the first line that contains our identified starting keyword
-    sql_lines = sql.split("\n")
-    cleaned_lines = []
-    found_start = False
-    for line in sql_lines:
-        if not found_start and ("SELECT " in line.upper() or "WITH " in line.upper()):
-            found_start = True
-        if found_start:
-            cleaned_lines.append(line)
-    sql = "\n".join(cleaned_lines).strip()
+    # --- Precise Code Isolation ---
+    # Find the FIRST occurrence of WITH or SELECT that isn't preceded by letters (start of command)
+    # We use a non-greedy catch-all to ensure we get the whole query
+    match = re.search(r'\b(WITH|SELECT)\b', sql, re.IGNORECASE)
+    if match:
+        sql = sql[match.start():].strip()
+    
+    # Remove any trailing conversational text after the semicolon
+    if ";" in sql:
+        sql = sql.split(";")[0] + ";"
     
     # SAFETY NET: If the LLM completely failed to generate a SELECT query, stop here.
     if not sql.upper().startswith("SELECT") and not sql.upper().startswith("WITH"):
+        session.close()  # FIX: close session to prevent connection leak
         return {
             **state,
             "error_count": error_count + 1,
+            "data_results": [],
+            "data_metadata": {"total_count": 0, "columns": [], "error": "SQL_EXTRACTION_FAILED"},
             "tool_query": "ERROR: The AI failed to generate a valid SQL query.",
-            "logs": state.get("logs", "") + "\nERROR: Context window exhausted or LLM failed to output SQL."
+            "logs": "\nERROR: Could not isolate a valid SQL SELECT or WITH statement."
         }
     
     
     try:
         results = session.execute(text(sql)).fetchall()
-        data = [dict(row._mapping) for row in results]
-        session.close() # Clean up
+        # Limit the data returned to the LLM for performance, but keep the total count
+        raw_data = [dict(row._mapping) for row in results]
         
-        # THE TRUE REASONING TRACE: Only show original reasoning to the user
+        # --- Automated Dimensional Enrichment ---
+        reference_context = {}
+        # Find tables mentioned in the SQL
+        tables_found = re.findall(r'\b(?:FROM|JOIN)\s+([a-zA-Z0-9_]+)\b', sql, re.IGNORECASE)
+        
+        for table in set(t.lower() for t in tables_found):
+            # Check if this table has reference columns defined in our Data Dictionary
+            table_meta = DATA_DICTIONARY_JSON.get(table)
+            if table_meta and "reference_columns" in table_meta:
+                ref_cols = ", ".join(table_meta["reference_columns"])
+                ref_sql = f"SELECT DISTINCT {ref_cols} FROM {table}"
+                try:
+                    ref_res = session.execute(text(ref_sql)).fetchall()
+                    reference_context[table] = [dict(r._mapping) for r in ref_res]
+                except Exception:
+                    continue # Silently fail if ref query fails to avoid crashing main flow
+
+        session.close() 
+        
+        # --- Structured Tool Response ---
+        total_count = len(raw_data)
+        schema = list(raw_data[0].keys()) if raw_data else []
+        
+        # We only pass a manageable subset to the synthesis layer
+        display_data = raw_data[:25] 
+        
+        metadata = {
+            "total_count": total_count,
+            "columns": schema,
+            "truncated": total_count > 25
+        }
+        
         final_trace = thought_block if thought_block else "Analyzing database for clinical patterns..."
         
         return {
             **state, 
-            "data_results": data, 
+            "data_results": display_data, 
+            "data_metadata": metadata,
+            "reference_context": reference_context, # Pass context to synthesis
             "tool_query": sql, 
-            "logs": final_trace
+            "logs": "\n" + final_trace
         }
     except Exception as e:
         session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
         session.close()
+        
         # Truncate large SQL in logs to keep the Reason Trace readable
         sql_snippet = sql[:200] + "..." if len(sql) > 200 else sql
         error_msg = f"\nERROR at attempt {error_count+1}: {str(e)[:150]}...\n[SQL Snippet]: {sql_snippet}"
         
+        # Explicitly inform the state of the failure
         return {
             **state, 
             "error_count": error_count + 1, 
-            "tool_query": f"ERROR: {str(e)}\nSQL attempt: {sql}",
-            "logs": state.get("logs", "") + error_msg
+            "data_results": [],
+            "data_metadata": {"total_count": 0, "columns": [], "error": str(e)},
+            "tool_query": f"ERROR: {str(e)}",
+            "logs": error_msg
         }
 
 def rag_node(state: AgentState):
     session = SessionLocal()
     search_query = state["query"]
     
-    # Context Injection (Context Collision Fix)
-    # If SQL already found specific people, inject their names into the vector search
+    # Context Enrichment: If SQL already retrieved records, summarise them generically
+    # to focus the vector search — no hardcoded field names, works for any table schema
     if state.get("data_results") and isinstance(state["data_results"], list):
-        names = []
-        for row in state["data_results"]:
+        rows = state["data_results"][:5]
+        row_snippets = []
+        for row in rows:
             if isinstance(row, dict):
-                if "first_name" in row and "last_name" in row:
-                    names.append(f"{row['first_name']} {row['last_name']}")
-                elif "patient_name" in row:
-                    names.append(str(row["patient_name"]))
-        
-        # Deduplicate and limit to prevent massive vector queries
-        names = list(set(names))[:5]
-        if names:
-            search_query += f". Specific focus on patients: {', '.join(names)}"
+                # Serialize each row as "key: value" pairs, ignore nulls
+                row_text = ", ".join(
+                    f"{k}: {v}" for k, v in row.items() if v is not None
+                )
+                row_snippets.append(row_text)
+        if row_snippets:
+            search_query += f". Related records: {'; '.join(row_snippets[:3])[:300]}"
 
     data = get_clinical_notes_semantic(session, search_query)
     session.close()
@@ -168,8 +201,3 @@ def rag_node(state: AgentState):
         "tool_query": "Semantic Search on Clinical Notes",
         "logs": state.get("logs", "")
     }
-
-def should_retry_sql(state: AgentState):
-    if "ERROR" in (state["tool_query"] or "") and state["error_count"] < 2:
-        return "retry"
-    return "continue"
