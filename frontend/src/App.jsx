@@ -120,10 +120,14 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-off-white font-sans text-dark-grey">
+    <div className="flex flex-col h-screen bg-dark-bg font-sans text-gray-100 overflow-hidden relative">
       <Header />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Ambient background glows for depth */}
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-clinical-blue/10 rounded-full blur-[140px] pointer-events-none animate-glow-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-clinical-blue/5 rounded-full blur-[120px] pointer-events-none"></div>
+
         <Sidebar 
           availableModels={availableModels}
           selectedModel={selectedModel}
@@ -136,14 +140,18 @@ function App() {
           setCurrentView={setCurrentView}
         />
 
-        <main className="flex-1 flex flex-col bg-off-white overflow-hidden relative">
+        <main className="flex-1 flex flex-col overflow-hidden relative bg-black/10">
           {currentView === 'chat' ? (
+
+
             <>
               <MessageList 
                 messages={messages} 
                 isLoading={isLoading} 
                 scrollRef={scrollRef} 
+                isTraceOpen={isTraceOpen}
                 setIsTraceOpen={setIsTraceOpen}
+                traceLogs={traceLogs}
                 setTraceLogs={setTraceLogs}
               />
               

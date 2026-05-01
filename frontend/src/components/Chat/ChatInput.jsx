@@ -15,10 +15,10 @@ const ChatInput = ({ input, setInput, handleSend, isLoading }) => {
   };
 
   return (
-    <div className="w-full pt-4 pb-4 px-6 flex flex-col items-center border-t border-gray-100 bg-off-white/80 backdrop-blur-sm self-end">
+    <div className="w-full pt-2.5 pb-2 px-6 flex flex-col items-center border-t border-white/10 bg-[#080C14]/90 backdrop-blur-2xl self-end z-20 shadow-[0_-8px_25px_rgba(0,0,0,0.2)]">
       <div className="w-full max-w-3xl relative">
         <form onSubmit={handleSubmit} className="relative group">
-          <textarea 
+          <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => {
@@ -32,27 +32,29 @@ const ChatInput = ({ input, setInput, handleSend, isLoading }) => {
                 handleSubmit(e);
               }
             }}
-            placeholder="Query clinical data..." 
-            rows={1}
-            className="w-full pl-6 pr-16 pt-4 pb-14 bg-white border border-gray-100 rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_4px_6px_-2px_rgba(0,0,0,0.05)] focus:outline-none focus:shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] focus:-translate-y-0.5 transition-all duration-300 placeholder:text-gray-300 resize-none max-h-64 overflow-y-hidden"
+            placeholder="Search clinical records or run analytics..."
+            rows={3}
+            className="w-full pl-5 pr-14 py-3 bg-slate-900/60 border border-white/10 rounded-xl shadow-lg focus:outline-none focus:border-clinical-blue/40 focus:bg-slate-900/90 transition-all duration-300 placeholder:text-gray-600 text-sm text-gray-100 resize-none max-h-64 overflow-y-auto"
           />
 
-          <button 
+          <button
             type="submit"
-            className="absolute right-3 bottom-5 p-2 bg-clinical-blue text-white rounded-md hover:brightness-90 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center shadow-sm" 
+            className="absolute right-3.5 bottom-3.5 p-2 bg-clinical-blue text-slate-950 rounded-md hover:bg-clinical-blue/80 active:scale-95 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 flex items-center justify-center"
             disabled={isLoading || !input.trim()}
           >
-            <Send size={18} fill="white" />
+            <Send size={16} fill="currentColor" />
           </button>
         </form>
-        <div className="flex justify-between items-center mt-3 text-[10px] text-gray-400">
-          <p>Clinical AI can make mistakes. Check important info.</p>
-          <div className="flex items-center gap-2">
-            <span>Build v1.2.5 • Stable</span>
-          </div>
+        <div className="flex justify-between items-center mt-1.5 text-[9px] text-gray-600 font-bold px-1 uppercase tracking-[0.05em]">
+          <p className="flex items-center gap-2">
+            AI can make mistakes. Verify critical medical data.
+          </p>
+          <span className="opacity-40 font-medium">Build v1.2.5 Stable</span>
         </div>
       </div>
     </div>
+
+
   );
 };
 
