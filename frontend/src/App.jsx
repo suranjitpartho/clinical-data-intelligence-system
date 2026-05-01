@@ -14,7 +14,7 @@ const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
 function App() {
   const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'
   const [messages, setMessages] = useState([]);
-  const [history, setHistory] = useState([]); 
+  const [history, setHistory] = useState([]);
   const [threadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +27,7 @@ function App() {
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
-  
+
   const scrollRef = useRef(null);
 
   const fetchAnalytics = async () => {
@@ -61,7 +61,7 @@ function App() {
           axios.get(`${API_BASE}/config`),
           axios.get(`${API_BASE}/models`)
         ]);
-        
+
         setAvailableModels(modelsRes.data);
         const currentModel = modelsRes.data.find(m => m.id === configRes.data.model_name);
         setModelName(currentModel ? currentModel.name : configRes.data.model_name);
@@ -80,39 +80,39 @@ function App() {
 
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
-    
+
     const originalInput = input;
     setInput("");
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE}/query`, { 
+      const response = await axios.post(`${API_BASE}/query`, {
         query: originalInput,
         model: selectedModel,
         provider: selectedProvider,
         thread_id: threadId,
         history: history
       });
-      
-      const aiResponse = { 
-        role: 'ai', 
+
+      const aiResponse = {
+        role: 'ai',
         content: response.data.final_answer,
         data: response.data.data_results,
         nextStep: response.data.next_step,
         logs: response.data.logs,
         isError: response.data.is_error
       };
-      
+
       setMessages(prev => [...prev, aiResponse]);
       if (response.data.history) {
         setHistory(response.data.history);
       }
       await fetchAnalytics();
     } catch (error) {
-      setMessages(prev => [...prev, { 
-        role: 'ai', 
+      setMessages(prev => [...prev, {
+        role: 'ai',
         content: "Error: Could not connect to the Clinical Intelligence backend.",
-        isError: true 
+        isError: true
       }]);
     } finally {
       setIsLoading(false);
@@ -128,7 +128,7 @@ function App() {
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-clinical-blue/10 rounded-full blur-[140px] pointer-events-none animate-glow-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-clinical-blue/5 rounded-full blur-[120px] pointer-events-none"></div>
 
-        <Sidebar 
+        <Sidebar
           availableModels={availableModels}
           selectedModel={selectedModel}
           selectedProvider={selectedProvider}
@@ -145,17 +145,17 @@ function App() {
 
 
             <>
-              <MessageList 
-                messages={messages} 
-                isLoading={isLoading} 
-                scrollRef={scrollRef} 
+              <MessageList
+                messages={messages}
+                isLoading={isLoading}
+                scrollRef={scrollRef}
                 isTraceOpen={isTraceOpen}
                 setIsTraceOpen={setIsTraceOpen}
                 traceLogs={traceLogs}
                 setTraceLogs={setTraceLogs}
               />
-              
-              <ChatInput 
+
+              <ChatInput
                 input={input}
                 setInput={setInput}
                 handleSend={handleSend}
@@ -163,18 +163,18 @@ function App() {
               />
             </>
           ) : (
-            <AnalyticsView 
-              metrics={analyticsData} 
+            <AnalyticsView
+              metrics={analyticsData}
               isLoading={isAnalyticsLoading}
-              onBack={() => setCurrentView('chat')} 
+              onBack={() => setCurrentView('chat')}
             />
           )}
         </main>
 
-        <TraceSidebar 
-          isOpen={isTraceOpen} 
-          setIsOpen={setIsTraceOpen} 
-          logs={traceLogs} 
+        <TraceSidebar
+          isOpen={isTraceOpen}
+          setIsOpen={setIsTraceOpen}
+          logs={traceLogs}
         />
       </div>
     </div>

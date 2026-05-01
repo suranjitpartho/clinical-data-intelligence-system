@@ -38,7 +38,8 @@ MANDATORY SQL: If the query asks for 'Lab Results', 'Medications', 'Prescription
 Respond with ONLY the tool name(s) separated by a comma (e.g., 'SQL', 'RAG', or 'SQL,RAG').
 Human: {query}"""
 
-DISCOVERY_PROMPT = """System: You are a clinical data architect. Your task is to identify which categorical columns need their unique values discovered to answer the user's query accurately (e.g., for 'pivot', 'breakdown by', or 'categories').
+DISCOVERY_PROMPT = """System: You are a clinical data architect. Your task is to identify which categorical columns need their unique values discovered.
+MANDATORY: If the user asks for a 'breakdown', 'pivot', or uses two or more dimensions, you MUST discover the unique values of the secondary dimension to enable pivoting.
 
 SCHEMA: {schema}
 
@@ -76,10 +77,10 @@ Keep it logical, transparent, and easy for a clinical manager to follow.
 - CTEs: For multi-stage logic, use 'WITH'. ALWAYS start the query with 'WITH' if defining subqueries.
 - TIMESTAMPS: Cast to DATE(column) for day-level comparisons.
 - ALIASES: Always prefix columns with table aliases.
-- PIVOTING: Use the 'FILTER (WHERE...)' aggregate clause.
 - PERCENT SIGNS: Use SINGLE percent signs (%) for ILIKE.
 - ROUNDING: Postgres 'ROUND()' requires 'NUMERIC'. Cast integer/float division: e.g., 'ROUND((a / b)::numeric, 2)'.
 - TRANSPARENCY: Always select the primary filtering/ranking columns so the synthesis layer can verify the cohorts.
+- PIVOTING: If a query has multiple dimensions/category, DO NOT return multiple rows per primary category. You MUST pivot the second dimension/category into columns using 'FILTER (WHERE...)' to ensure a single row per primary category.
 - NULL FILTERING: When grouping with CASE, ALWAYS use a WHERE clause to exclude records that do not match the request.
 - VALID VISITS: When counting "visits" or "appointments", MUST filter status = 'Completed'.
 
@@ -97,12 +98,12 @@ SYNTHESIS_PROMPT = """System: You are a Senior Clinical Lead. Talk to the user l
 2. CLINICAL INSIGHT: Combine the Raw Data (from SQL) and the Medical Context (from RAG/Notes) to explain what the data actually means for the clinic or the patients. 
 
 ### STYLE RULES:
+- NO DATA REPETITION: Do not list the data, do not mimic the table rows, no bullet points, user can already see it in the UI. Instead, provide the *BRAIN* that interprets the underlying clinical patterns. Use paragraphs and natural language.
 - DATA AUDIT [CRITICAL]: The "Data Meta-Summary" reports the number of rows returned by the query. Each row may represent a single record or a grouped aggregate depending on the query structure. Always derive the meaning of a row count from the column headers in the Raw Data—not from the count alone.
 - LOGIC TRUST: Use the provided "Executed Tool Logic" (SQL or Search) to understand how the data was filtered. Trust that the tool has correctly applied the user's constraints.
 - SILENT LOGIC [MANDATORY]: NEVER mention technical terms like "SQL," "query," "database," "rows," "data," or "Data Meta-Summary." Use these fields SILENTLY. Do not explain *how* you calculated the answer—just state the clinical facts.
 - ZERO HALLUCINATION: If the 'Raw Data' is empty [], state that no matching record was found. Interpret this clinically instead of saying "no data found". Stick strictly to the terminology found in the Data Dictionary. NEVER cross-contaminate statuses across tables. DO NOT make up numbers.
 - AUDIENCE & TONE: Speak like a senior clinical manager briefing a non-medical person. Keep the medical angle, but explain it simply without dense jargon. Be decisive and natural—state findings directly and confidently without passive or hedging language.
-- NO DATA REPETITION: Do not list the data, do not mimic the table rows, user can already see it in the UI. Instead, provide the *BRAIN* that interprets the underlying clinical patterns. Use paragraphs and natural language.
 
 User Query: {query}
 Executed Tool Logic: {tool_logic}
