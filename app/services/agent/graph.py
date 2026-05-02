@@ -140,6 +140,7 @@ class ClinicalGraph:
                 "next_step": ", ".join(final_output.get("tools_needed", [])),
                 "data_results": final_output["data_results"],
                 "medical_context": final_output.get("medical_context", []),
+                "tool_query": final_output.get("tool_query"),
                 "logs": final_output["logs"],
                 "history": new_messages,
                 "is_error": False

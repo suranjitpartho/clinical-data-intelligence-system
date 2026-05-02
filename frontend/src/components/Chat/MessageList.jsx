@@ -1,9 +1,8 @@
-import React from 'react';
-import { Database, Search, Brain, AlertCircle } from 'lucide-react';
+import { Database, Search, Brain, AlertCircle, Download } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
 
-const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs }) => {
+const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport }) => {
   return (
     <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
       <div className="max-w-3xl mx-auto w-full p-4 space-y-5 pb-6">
@@ -87,6 +86,18 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
                       <Brain size={12} className={isTraceOpen && traceLogs === msg.logs ? 'text-clinical-blue' : 'text-gray-400'} />
                       <span className="text-[9px] font-bold uppercase tracking-wider">
                         Reasoning Trace
+                      </span>
+                    </button>
+                  )}
+
+                  {msg.tool_query && msg.tool_query.toUpperCase().includes("SELECT") && (
+                    <button 
+                      onClick={() => onExport(msg.tool_query)}
+                      className="flex items-center gap-2 border px-3 py-1 rounded-md transition-all cursor-pointer shadow-sm bg-white/[0.05] border-white/10 hover:bg-white/[0.08] text-gray-300"
+                    >
+                      <Download size={12} className="text-gray-400" />
+                      <span className="text-[9px] font-bold uppercase tracking-wider">
+                        Export Full CSV
                       </span>
                     </button>
                   )}
