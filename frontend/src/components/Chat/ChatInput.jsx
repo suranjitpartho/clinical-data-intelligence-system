@@ -34,12 +34,12 @@ const ChatInput = ({ input, setInput, handleSend, isLoading }) => {
             }}
             placeholder="Search clinical records or run analytics..."
             rows={3}
-            className="w-full pl-5 pr-14 py-3 bg-slate-900/60 border border-white/10 rounded-xl shadow-lg focus:outline-none focus:border-clinical-blue/40 focus:bg-slate-900/90 transition-all duration-300 placeholder:text-gray-600 text-sm text-gray-100 resize-none max-h-64 overflow-y-auto"
+            className="w-full pl-5 pr-14 py-3 bg-slate-900/60 border border-white/10 rounded-md focus:outline-none focus:border-clinical-blue/40 focus:bg-slate-900/90 transition-all duration-300 placeholder:text-gray-600 text-sm text-gray-100 resize-none max-h-64 overflow-y-auto"
           />
 
           <button
             type="submit"
-            className="absolute right-3.5 bottom-3.5 p-2 bg-clinical-blue text-slate-950 rounded-md hover:bg-clinical-blue/80 active:scale-95 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 flex items-center justify-center"
+            className="absolute right-3.5 bottom-3.5 p-2 bg-clinical-blue text-slate-950 rounded-md hover:bg-clinical-blue/80 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 flex items-center justify-center"
             disabled={isLoading || !input.trim()}
           >
             <Send size={16} fill="currentColor" />

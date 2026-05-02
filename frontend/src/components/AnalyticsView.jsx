@@ -7,7 +7,7 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
   if (isLoading && !metrics) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-dark-bg h-full">
-        <div className="w-12 h-12 border-2 border-white/5 border-t-clinical-blue rounded-full animate-spin mb-4 shadow-[0_0_15px_rgba(34,211,238,0.2)]" />
+        <div className="w-12 h-12 border-2 border-white/5 border-t-clinical-blue rounded-full animate-spin mb-4" />
         <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.3em]">Synchronizing Intelligence Nodes</p>
       </div>
     );
@@ -23,7 +23,7 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
         <div className="flex justify-between items-end mb-8">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-clinical-blue shadow-[0_0_8px_rgba(34,211,238,0.8)] animate-pulse" />
+              <div className="w-1.5 h-1.5 rounded-full bg-clinical-blue" />
               <span className="text-[9px] font-bold text-clinical-blue uppercase tracking-[0.2em]">Agent Intelligence Node</span>
             </div>
             <h1 className="text-2xl font-display font-bold text-white tracking-tight">Agent <span className="text-clinical-blue">Performance</span></h1>
@@ -32,7 +32,7 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5 px-1">Last Synced</p>
-            <div className="bg-white/5 px-4 py-1.5 rounded-full border border-white/5 inline-block">
+            <div className="bg-white/5 px-4 py-1.5 rounded-md border border-white/5 inline-block">
               <p className="text-xs font-bold text-gray-300">{metrics?.cached_at || 'Just now'}</p>
             </div>
           </div>
@@ -66,20 +66,20 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
         <div className="space-y-6">
           <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2.5">
             <h2 className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.3em]">Agent Execution Logs</h2>
-            <span className="text-[9px] bg-clinical-blue/10 text-clinical-blue px-2 py-0.5 rounded-full font-bold border border-clinical-blue/20">REAL-TIME</span>
+            <span className="text-[9px] bg-clinical-blue/10 text-clinical-blue px-2 py-0.5 rounded-md font-bold border border-clinical-blue/20">REAL-TIME</span>
           </div>
           
           <div className="space-y-4">
             {traces.map((trace) => {
               const isExpanded = expandedTrace === trace.id;
               return (
-                <div key={trace.id} className={`bg-[#0F172A]/80 backdrop-blur-md rounded-2xl border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-clinical-blue/40 shadow-[0_0_30px_rgba(34,211,238,0.1)]' : 'border-white/10 hover:border-white/20'}`}>
+                <div key={trace.id} className={`bg-[#0F172A]/80 backdrop-blur-md rounded-lg border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-clinical-blue/40' : 'border-white/10 hover:border-white/20'}`}>
                   <div 
                     onClick={() => setExpandedTrace(isExpanded ? null : trace.id)}
                     className="p-4 flex items-start justify-between cursor-pointer group"
                   >
                     <div className="flex items-start gap-4 flex-1 pr-6 pt-0.5">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300 ${isExpanded ? 'bg-clinical-blue text-slate-900 shadow-[0_0_12px_rgba(34,211,238,0.4)]' : 'bg-white/5 text-gray-500 group-hover:bg-white/10 group-hover:text-clinical-blue'}`}>
+                      <div className={`w-10 h-10 rounded-md flex items-center justify-center transition-all duration-300 ${isExpanded ? 'bg-clinical-blue text-slate-900' : 'bg-white/5 text-gray-500 group-hover:bg-white/10 group-hover:text-clinical-blue'}`}>
                         <Search size={18} />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -129,7 +129,7 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
                             {sIdx !== trace.steps.length - 1 && (
                               <div className="absolute left-5 top-10 bottom-[-20px] w-[1px] bg-white/5"></div>
                             )}
-                            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center text-clinical-blue text-xs font-bold flex-shrink-0 z-10 shadow-lg">
+                            <div className="w-10 h-10 rounded-md bg-slate-800 border border-white/10 flex items-center justify-center text-clinical-blue text-xs font-bold flex-shrink-0 z-10">
                               {step.name.charAt(0)}
                             </div>
                             <div className="flex-1 pt-1">
@@ -149,7 +149,7 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
                               </div>
                               <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
                                 <div 
-                                  className="h-full bg-clinical-blue shadow-[0_0_10px_rgba(34,211,238,0.5)] transition-all duration-1000" 
+                                  className="h-full bg-clinical-blue transition-all duration-1000" 
                                   style={{ width: `${Math.min(100, (parseFloat(step.latency) / parseFloat(trace.total_latency)) * 100)}%` }}
                                 />
                               </div>
@@ -170,8 +170,8 @@ const AnalyticsView = ({ metrics, isLoading, onBack }) => {
 };
 
 const StatCard = ({ label, value, icon }) => (
-  <div className="bg-slate-900/60 backdrop-blur-md p-5 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300 group shadow-lg">
-    <div className="p-2 bg-white/5 w-fit rounded-lg mb-4 group-hover:bg-clinical-blue/10 transition-colors border border-white/5">{icon}</div>
+  <div className="bg-slate-900/60 backdrop-blur-md p-5 rounded-md border border-white/10 hover:border-white/20 transition-all duration-300 group">
+    <div className="p-2 bg-white/5 w-fit rounded-md mb-4 group-hover:bg-clinical-blue/10 transition-colors border border-white/5">{icon}</div>
     <div>
       <p className="text-xl font-display font-bold text-white tracking-tight group-hover:text-clinical-blue transition-colors">{value}</p>
       <p className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1.5">{label}</p>

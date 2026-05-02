@@ -30,6 +30,13 @@ function App() {
 
   const scrollRef = useRef(null);
 
+  const createNewChat = () => {
+    setMessages([]);
+    setHistory([]);
+    setIsTraceOpen(false);
+    setCurrentView('chat');
+  };
+
   const fetchAnalytics = async () => {
     setIsAnalyticsLoading(true);
     try {
@@ -138,6 +145,7 @@ function App() {
           setModelName={setModelName}
           currentView={currentView}
           setCurrentView={setCurrentView}
+          onNewChat={createNewChat}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden relative bg-black/10">
