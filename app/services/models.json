@@ -10,9 +10,9 @@
     "provider": "groq"
   },
   {
-    "id": "gpt-4o",
-    "name": "GPT-4o (GitHub)",
-    "provider": "github"
+    "id": "groq/compound",
+    "name": "Groq Compound (Groq)",
+    "provider": "groq"
   },
   {
     "id": "Llama-3.3-70B-Instruct",
@@ -20,8 +20,28 @@
     "provider": "github"
   },
   {
-    "id": "grok-3",
-    "name": "Grok 3 (GitHub)",
+    "id": "gpt-4o",
+    "name": "GPT-4o (GitHub)",
     "provider": "github"
+  },
+  {
+    "id": "meta-llama/llama-3.3-70b-instruct:free",
+    "name": "Llama 3.3 70B (OpenRouter)",
+    "provider": "openrouter"
+  },
+  {
+    "id": "nvidia/nemotron-3-super-120b-a12b:free",
+    "name": "Nemotron-3 Super (OpenRouter)",
+    "provider": "openrouter"
+  },
+  {
+    "id": "openai/gpt-oss-120b:free",
+    "name": "GPT-OSS 120B (OpenRouter)",
+    "provider": "openrouter"
+  },
+  {
+    "id": "qwen/qwen3-coder",
+    "name": "Qwen 3 Coder (OpenRouter)",
+    "provider": "openrouter"
   }
 ]

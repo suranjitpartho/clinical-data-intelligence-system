@@ -20,9 +20,5 @@ Thumbs.db
 .idea/
 *.swp
 
-# Project Internals
-PROJECT_BRIEF.md
-PROJECT_RULES.md
-
-# Legacy Assets
-frontend/src/assets/architecture_diagram.png
+# Agent Configuration
+.agents

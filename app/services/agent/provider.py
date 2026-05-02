@@ -30,6 +30,19 @@ def get_llm(provider=None, model_name=None):
             timeout=45,
             max_retries=2
         )
+    elif provider == "openrouter":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model_name, 
+            temperature=0, 
+            max_tokens=4096,
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "https://github.com/suranjitpartho/clinical-data-intelligence-system",
+                "X-Title": "Clinical Data Intelligence System"
+            }
+        )
     
     # Default fallback
     from langchain_openai import ChatOpenAI
