@@ -22,17 +22,19 @@ class ClinicalGraph:
 
     def route_from_classify(self, state: AgentState):
         tools = state.get("tools_needed", [])
+        routes = []
         if "sql" in tools:
-            return "sql"
+            routes.append("sql")
         if "rag" in tools:
-            return "rag"
-        return "synthesis"
+            routes.append("rag")
+        
+        if not routes:
+            return ["synthesis"]
+        return routes
 
     def route_from_sql(self, state: AgentState):
         if "ERROR" in (state.get("tool_query") or "") and state.get("error_count", 0) < 2:
             return "retry"
-        if "rag" in state.get("tools_needed", []):
-            return "rag"
         return "continue"
 
     def _create_workflow(self):
@@ -64,7 +66,6 @@ class ClinicalGraph:
             self.route_from_sql,
             {
                 "retry": "sql_tool",
-                "rag": "rag_tool",
                 "continue": "synthesis"
             }
         )

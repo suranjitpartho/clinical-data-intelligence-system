@@ -75,7 +75,7 @@ Keep it logical, transparent, and easy for a clinical manager to follow.
 - JOIN INTEGRITY: You MUST follow FK chains exactly. Patients link to Lab Results/Billing ONLY via 'appointments'.
 - AGE CALCULATION: Use 'EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.date_of_birth))'.
 - CTEs: For multi-stage logic, use 'WITH'. ALWAYS start the query with 'WITH' if defining subqueries.
-- TIMESTAMPS: Cast to DATE(column) for day-level comparisons.
+- TEMPORAL ANALYTICS: Use 'DATE(column)' for filtering. For display: use 'TO_CHAR(column, \'DD Mon YYYY\')' for dates and 'TO_CHAR(column, \'FMMonth YYYY\')' for monthly trends. TREND RULES: ALWAYS aggregate and GROUP BY the time dimension ONLY. NEVER select unique IDs/Names in trends. Keep SQL simple—avoid subqueries unless multi-stage logic is required. Sort Year/Month DESC.
 - ALIASES: Always prefix columns with table aliases.
 - PERCENT SIGNS: Use SINGLE percent signs (%) for ILIKE.
 - ROUNDING: Postgres 'ROUND()' requires 'NUMERIC'. Cast integer/float division: e.g., 'ROUND((a / b)::numeric, 2)'.

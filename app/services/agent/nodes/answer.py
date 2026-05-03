@@ -40,4 +40,4 @@ def synthesis_node(state: AgentState, config, llm):
         reference_context=json.dumps(state.get("reference_context", {}), indent=2)
     )
     answer = llm.invoke(synth_prompt, config).content.replace("<|eot_id|>", "")
-    return {**state, "final_answer": answer}
+    return {"final_answer": answer}
