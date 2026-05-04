@@ -19,12 +19,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import csv
+import io
+from fastapi.responses import StreamingResponse, FileResponse
+from sqlalchemy import text
+from app.db.base import SessionLocal
+
 class QueryRequest(BaseModel):
     query: str
     model: str = None
     provider: str = None
     thread_id: str = "default_session"
     history: list = []
+
+class ExportRequest(BaseModel):
+    sql: str
 
 @app.get("/models")
 async def get_models():
@@ -43,7 +52,6 @@ async def get_config():
     }
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from app.services.analytics import analytics_service
 
 @app.get("/analytics")
@@ -64,6 +72,52 @@ async def process_query(request: QueryRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/export-csv")
+async def export_csv(request: ExportRequest):
+    """
+    Scalable CSV export that streams results from the database.
+    Prevents memory overflow even with millions of rows.
+    """
+    if not request.sql or not request.sql.strip().upper().startswith(("SELECT", "WITH")):
+        raise HTTPException(status_code=400, detail="Invalid SQL query for export")
+    
+    def generate_csv():
+        db = SessionLocal()
+        try:
+            # We execute the query and fetch in a way that doesn't load everything into RAM
+            # result.yield_per(1000) could be used if it was a query object, 
+            # for raw text we iterate the cursor.
+            result = db.execute(text(request.sql))
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write Header
+            keys = result.keys()
+            writer.writerow(keys)
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+            
+            # Write Rows in chunks
+            for row in result:
+                writer.writerow(row)
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+        except Exception as e:
+            # In a stream, we can't easily change status code once started, 
+            # but we can yield the error in the CSV for debugging or log it.
+            print(f"Export Error: {e}")
+        finally:
+            db.close()
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=clinical_intelligence_export.csv"}
+    )
 
 # --- UI Serving Logic ---
 # Mount the static files (React build) if the directory exists

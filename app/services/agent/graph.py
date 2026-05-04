@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.db.base import SessionLocal
 from app.models.logs import AuditLog
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from app.services.agent.state import AgentState
 from app.services.agent.provider import get_llm
 
@@ -22,17 +23,19 @@ class ClinicalGraph:
 
     def route_from_classify(self, state: AgentState):
         tools = state.get("tools_needed", [])
+        routes = []
         if "sql" in tools:
-            return "sql"
+            routes.append("sql")
         if "rag" in tools:
-            return "rag"
-        return "synthesis"
+            routes.append("rag")
+        
+        if not routes:
+            return ["synthesis"]
+        return routes
 
     def route_from_sql(self, state: AgentState):
         if "ERROR" in (state.get("tool_query") or "") and state.get("error_count", 0) < 2:
             return "retry"
-        if "rag" in state.get("tools_needed", []):
-            return "rag"
         return "continue"
 
     def _create_workflow(self):
@@ -64,7 +67,6 @@ class ClinicalGraph:
             self.route_from_sql,
             {
                 "retry": "sql_tool",
-                "rag": "rag_tool",
                 "continue": "synthesis"
             }
         )
@@ -97,9 +99,18 @@ class ClinicalGraph:
                     "model": self.model_name
                 }
             }
+            # Convert incoming history (dicts) to LangChain Message objects
+            message_history = []
+            if history:
+                for m in history:
+                    if m["role"] == "user":
+                        message_history.append(HumanMessage(content=m["content"]))
+                    elif m["role"] == "assistant":
+                        message_history.append(AIMessage(content=m["content"]))
+
             initial_state = {
                 "query": query,
-                "messages": history or [],
+                "messages": message_history + [HumanMessage(content=query)],
                 "tools_needed": [],
                 "tool_query": None,
                 "data_results": [],
@@ -123,11 +134,11 @@ class ClinicalGraph:
             db.add(log)
             db.commit()
             
-            # Update history for the return
-            new_messages = (history or []) + [
-                {"role": "user", "content": query},
-                {"role": "assistant", "content": final_output["final_answer"]}
-            ]
+            # Convert history for the return (back to dicts for frontend)
+            new_messages = []
+            for m in final_output["messages"]:
+                role = "user" if isinstance(m, HumanMessage) else "assistant"
+                new_messages.append({"role": role, "content": m.content})
             
             if callbacks:
                 try:
@@ -140,6 +151,7 @@ class ClinicalGraph:
                 "next_step": ", ".join(final_output.get("tools_needed", [])),
                 "data_results": final_output["data_results"],
                 "medical_context": final_output.get("medical_context", []),
+                "tool_query": final_output.get("tool_query"),
                 "logs": final_output["logs"],
                 "history": new_messages,
                 "is_error": False

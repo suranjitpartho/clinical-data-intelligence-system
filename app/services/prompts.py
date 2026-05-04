@@ -75,7 +75,7 @@ Keep it logical, transparent, and easy for a clinical manager to follow.
 - JOIN INTEGRITY: You MUST follow FK chains exactly. Patients link to Lab Results/Billing ONLY via 'appointments'.
 - AGE CALCULATION: Use 'EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.date_of_birth))'.
 - CTEs: For multi-stage logic, use 'WITH'. ALWAYS start the query with 'WITH' if defining subqueries.
-- TIMESTAMPS: Cast to DATE(column) for day-level comparisons.
+- TEMPORAL ANALYTICS: Use 'DATE(column)' for filtering. For display: use 'TO_CHAR(column, \'DD Mon YYYY\')' for dates and 'TO_CHAR(column, \'FMMonth YYYY\')' for monthly trends. TREND RULES: ALWAYS aggregate and GROUP BY the time dimension ONLY. NEVER select unique IDs/Names in trends. Keep SQL simple—avoid subqueries unless multi-stage logic is required. Sort Year/Month DESC.
 - ALIASES: Always prefix columns with table aliases.
 - PERCENT SIGNS: Use SINGLE percent signs (%) for ILIKE.
 - ROUNDING: Postgres 'ROUND()' requires 'NUMERIC'. Cast integer/float division: e.g., 'ROUND((a / b)::numeric, 2)'.
@@ -84,6 +84,7 @@ Keep it logical, transparent, and easy for a clinical manager to follow.
 - NULL FILTERING: When grouping with CASE, ALWAYS use a WHERE clause to exclude records that do not match the request.
 - USER-FRIENDLY OUTPUT TABLE: Always prioritize selecting human-readable label names over internal database IDs or UUIDs. NEVER show internal IDs to the user until requested. Always JOIN with the relevant parent table to fetch and display the human-readable labels instead of IDs.
 - VALID VISITS: When counting "visits" or "appointments", MUST filter status = 'Completed'.
+- STRING SEARCH: For all string-based filters, you MUST use 'ILIKE' with wildcards (e.g., %keyword%). Exact matches ('=') will fail due to medical nomenclature variations.
 
 [DISCOVERY CONTEXT]:
 {{discovery_context}}

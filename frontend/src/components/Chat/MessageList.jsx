@@ -1,9 +1,8 @@
-import React from 'react';
-import { Database, Search, Brain, AlertCircle } from 'lucide-react';
+import { Database, Search, Brain, AlertCircle, Download } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
 
-const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs }) => {
+const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport }) => {
   return (
     <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
       <div className="max-w-3xl mx-auto w-full p-4 space-y-5 pb-6">
@@ -21,7 +20,7 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
             </p>
             <div className="flex gap-2 flex-wrap justify-center pt-4">
               {['Inventory status', 'Patient demographics', 'Lab results'].map(chip => (
-                <button key={chip} className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[11px] font-semibold text-gray-400 hover:bg-white/10 hover:text-white transition-all">
+                <button key={chip} className="px-4 py-2 bg-white/5 border border-white/10 rounded-md text-[11px] font-semibold text-gray-400 hover:bg-white/10 hover:text-white transition-all">
                   {chip}
                 </button>
               ))}
@@ -37,7 +36,7 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
                   msg.role === 'user' 
                     ? 'chat-bubble-user' 
                     : msg.isError 
-                      ? 'py-3.5 px-4 rounded-xl border border-red-500/40 flex gap-4 items-start bg-red-500/[0.02] shadow-[0_0_20px_rgba(239,68,68,0.08)]'
+                      ? 'py-3.5 px-4 rounded-md border border-red-500/40 flex gap-4 items-start bg-red-500/[0.02]'
                       : 'py-2'
                 }>
                   {msg.isError && <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={28} strokeWidth={2} />}
@@ -78,7 +77,7 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
                           setIsTraceOpen(true);
                         }
                       }}
-                      className={`flex items-center gap-2 border px-3 py-1 rounded-md transition-all cursor-pointer shadow-sm active:scale-95 ${
+                      className={`flex items-center gap-2 border px-3 py-1 rounded-md transition-all cursor-pointer shadow-sm ${
                         isTraceOpen && traceLogs === msg.logs
                         ? 'bg-clinical-blue/20 border-clinical-blue text-clinical-blue'
                         : 'bg-white/[0.05] border-white/10 hover:bg-white/[0.08] text-gray-300'
@@ -87,6 +86,18 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
                       <Brain size={12} className={isTraceOpen && traceLogs === msg.logs ? 'text-clinical-blue' : 'text-gray-400'} />
                       <span className="text-[9px] font-bold uppercase tracking-wider">
                         Reasoning Trace
+                      </span>
+                    </button>
+                  )}
+
+                  {msg.tool_query && msg.tool_query.toUpperCase().includes("SELECT") && (
+                    <button 
+                      onClick={() => onExport(msg.tool_query)}
+                      className="flex items-center gap-2 border px-3 py-1 rounded-md transition-all cursor-pointer shadow-sm bg-white/[0.05] border-white/10 hover:bg-white/[0.08] text-gray-300"
+                    >
+                      <Download size={12} className="text-gray-400" />
+                      <span className="text-[9px] font-bold uppercase tracking-wider">
+                        Export Full CSV
                       </span>
                     </button>
                   )}

@@ -30,6 +30,13 @@ function App() {
 
   const scrollRef = useRef(null);
 
+  const createNewChat = () => {
+    setMessages([]);
+    setHistory([]);
+    setIsTraceOpen(false);
+    setCurrentView('chat');
+  };
+
   const fetchAnalytics = async () => {
     setIsAnalyticsLoading(true);
     try {
@@ -99,6 +106,7 @@ function App() {
         content: response.data.final_answer,
         data: response.data.data_results,
         nextStep: response.data.next_step,
+        tool_query: response.data.tool_query,
         logs: response.data.logs,
         isError: response.data.is_error
       };
@@ -116,6 +124,24 @@ function App() {
       }]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExport = async (sql) => {
+    if (!sql) return;
+    try {
+      const response = await axios.post(`${API_BASE}/export-csv`, { sql }, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `clinical_export_${new Date().getTime()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to export CSV. Please try again.");
     }
   };
 
@@ -138,6 +164,7 @@ function App() {
           setModelName={setModelName}
           currentView={currentView}
           setCurrentView={setCurrentView}
+          onNewChat={createNewChat}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden relative bg-black/10">
@@ -153,6 +180,7 @@ function App() {
                 setIsTraceOpen={setIsTraceOpen}
                 traceLogs={traceLogs}
                 setTraceLogs={setTraceLogs}
+                onExport={handleExport}
               />
 
               <ChatInput

@@ -1,20 +1,23 @@
 import typing
+import operator
 from typing import Annotated, List, Dict, Optional
 from typing_extensions import TypedDict
+
+from langgraph.graph.message import add_messages
 
 # Python 3.9 + Pydantic 2 Compatibility Patch
 if not hasattr(typing, "_TypedDictMeta"):
     typing.TypedDict = TypedDict
 
 class AgentState(TypedDict):
-    query: str
-    messages: List[Dict] # Conversation history
-    tools_needed: List[str]
-    tool_query: Optional[str]
-    data_results: List[Dict]
-    data_metadata: Dict      # Structured metadata from the SQL tool (total_count, columns, error)
-    medical_context: List[str] # For RAG snippets
-    reference_context: Dict    # Dictionary of table-specific context (e.g. lab ranges)
-    final_answer: Optional[str]
-    error_count: int
-    logs: str
+    query: Annotated[str, lambda x, y: y]
+    messages: Annotated[list, add_messages]
+    tools_needed: Annotated[List[str], lambda x, y: y]
+    tool_query: Annotated[Optional[str], lambda x, y: y]
+    data_results: Annotated[List[Dict], lambda x, y: y]
+    data_metadata: Annotated[Dict, lambda x, y: y]
+    medical_context: Annotated[List[str], lambda x, y: y]
+    reference_context: Annotated[Dict, lambda x, y: y]
+    final_answer: Annotated[Optional[str], lambda x, y: y]
+    error_count: Annotated[int, lambda x, y: y]
+    logs: Annotated[str, operator.add]

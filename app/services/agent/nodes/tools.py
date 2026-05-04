@@ -95,7 +95,6 @@ def sql_node(state: AgentState, config, llm):
     if not sql.upper().startswith("SELECT") and not sql.upper().startswith("WITH"):
         session.close()  # FIX: close session to prevent connection leak
         return {
-            **state,
             "error_count": error_count + 1,
             "data_results": [],
             "data_metadata": {"total_count": 0, "columns": [], "error": "SQL_EXTRACTION_FAILED"},
@@ -144,10 +143,9 @@ def sql_node(state: AgentState, config, llm):
         final_trace = thought_block if thought_block else "Analyzing database for clinical patterns..."
         
         return {
-            **state, 
             "data_results": display_data, 
             "data_metadata": metadata,
-            "reference_context": reference_context, # Pass context to synthesis
+            "reference_context": reference_context, 
             "tool_query": sql, 
             "logs": "\n" + final_trace
         }
@@ -161,7 +159,6 @@ def sql_node(state: AgentState, config, llm):
         
         # Explicitly inform the state of the failure
         return {
-            **state, 
             "error_count": error_count + 1, 
             "data_results": [],
             "data_metadata": {"total_count": 0, "columns": [], "error": str(e)},
@@ -195,9 +192,14 @@ def rag_node(state: AgentState):
     context = [f"Record: {d['content']}" for d in data]
     
     print(f"[AGENT] RAG SUCCESS: Found {len(data)} results for query: {search_query[:50]}...")
+    # Construct a professional clinical trace
+    logs = (
+        "\n• Initiating Semantic Search across clinical notes and institutional guidelines..."
+        f"\n• Analyzing narrative patterns related to: '{search_query[:60]}...'"
+        f"\n• Successfully retrieved {len(data)} relevant medical records for context synthesis."
+    )
+
     return {
-        **state, 
         "medical_context": context, 
-        "tool_query": "Semantic Search on Clinical Notes",
-        "logs": state.get("logs", "")
+        "logs": logs
     }
