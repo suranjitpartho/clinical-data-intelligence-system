@@ -1,8 +1,15 @@
+from langchain_core.messages import HumanMessage, AIMessage
 from app.services.agent.state import AgentState
 from app.services.prompts import FOLLOW_UP_REWRITE_PROMPT, INTENT_CLASSIFY_PROMPT
 
 def rewrite_node(state: AgentState, config, llm):
-    history = [f"{m['role']}: {m['content']}" for m in state.get("messages", [])[-5:]]
+    # Extract text from LangChain message objects
+    msg_history = []
+    for m in state.get("messages", [])[:-1]: # Exclude the current query which was just added
+        role = "User" if isinstance(m, HumanMessage) else "Assistant"
+        msg_history.append(f"{role}: {m.content}")
+    
+    history = msg_history[-5:]
     if not history:
         return {"logs": "\n• Identifying search intent..."}
     

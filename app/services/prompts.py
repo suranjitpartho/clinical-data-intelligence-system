@@ -84,6 +84,7 @@ Keep it logical, transparent, and easy for a clinical manager to follow.
 - NULL FILTERING: When grouping with CASE, ALWAYS use a WHERE clause to exclude records that do not match the request.
 - USER-FRIENDLY OUTPUT TABLE: Always prioritize selecting human-readable label names over internal database IDs or UUIDs. NEVER show internal IDs to the user until requested. Always JOIN with the relevant parent table to fetch and display the human-readable labels instead of IDs.
 - VALID VISITS: When counting "visits" or "appointments", MUST filter status = 'Completed'.
+- STRING SEARCH: For all string-based filters, you MUST use 'ILIKE' with wildcards (e.g., %keyword%). Exact matches ('=') will fail due to medical nomenclature variations.
 
 [DISCOVERY CONTEXT]:
 {{discovery_context}}

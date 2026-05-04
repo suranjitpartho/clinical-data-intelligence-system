@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.db.base import SessionLocal
 from app.models.logs import AuditLog
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from app.services.agent.state import AgentState
 from app.services.agent.provider import get_llm
 
@@ -98,9 +99,18 @@ class ClinicalGraph:
                     "model": self.model_name
                 }
             }
+            # Convert incoming history (dicts) to LangChain Message objects
+            message_history = []
+            if history:
+                for m in history:
+                    if m["role"] == "user":
+                        message_history.append(HumanMessage(content=m["content"]))
+                    elif m["role"] == "assistant":
+                        message_history.append(AIMessage(content=m["content"]))
+
             initial_state = {
                 "query": query,
-                "messages": history or [],
+                "messages": message_history + [HumanMessage(content=query)],
                 "tools_needed": [],
                 "tool_query": None,
                 "data_results": [],
@@ -124,11 +134,11 @@ class ClinicalGraph:
             db.add(log)
             db.commit()
             
-            # Update history for the return
-            new_messages = (history or []) + [
-                {"role": "user", "content": query},
-                {"role": "assistant", "content": final_output["final_answer"]}
-            ]
+            # Convert history for the return (back to dicts for frontend)
+            new_messages = []
+            for m in final_output["messages"]:
+                role = "user" if isinstance(m, HumanMessage) else "assistant"
+                new_messages.append({"role": role, "content": m.content})
             
             if callbacks:
                 try:
