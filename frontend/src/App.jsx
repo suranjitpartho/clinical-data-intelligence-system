@@ -7,7 +7,8 @@ import Sidebar from './components/Sidebar';
 import MessageList from './components/Chat/MessageList';
 import ChatInput from './components/Chat/ChatInput';
 import TraceSidebar from './components/TraceSidebar';
-import AnalyticsView from './components/AnalyticsView';
+import AnalyticsView from './components/Analytics';
+
 
 const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
 
@@ -24,9 +25,11 @@ function App() {
   const [availableModels, setAvailableModels] = useState([]);
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const [traceLogs, setTraceLogs] = useState("");
-  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState(7);      // days: 7, 15, 30
+  const [analyticsPage, setAnalyticsPage] = useState(1);
+  const [analyticsPageSize] = useState(10);
 
   const scrollRef = useRef(null);
 
@@ -37,23 +40,40 @@ function App() {
     setCurrentView('chat');
   };
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
     setIsAnalyticsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/analytics`);
-      setAnalyticsData(res.data);
+      const res = await axios.get(`${API_BASE}/analytics`, {
+        params: { days, page, page_size: pageSize }
+      });
+      // Only replace data if we got a valid response — preserve stale data on Langfuse errors
+      if (res.data && !res.data.error) {
+        setAnalyticsData(prev => {
+          // If we are paginating (page > 1) and already have a summary, keep the stable summary
+          const isPaginating = page > 1;
+          return {
+            ...res.data,
+            summary: (isPaginating && prev?.summary) ? prev.summary : res.data.summary
+          };
+        });
+      } else if (res.data?.error) {
+        console.warn("Analytics fetch returned error:", res.data.error);
+        // Do NOT overwrite analyticsData — stale data stays visible
+      }
     } catch (error) {
       console.error("Analytics fetch error:", error);
+      // Network error — also keep existing data
     } finally {
       setIsAnalyticsLoading(false);
     }
   };
 
+  // Refetch when range or page changes
   useEffect(() => {
     if (currentView === 'analytics') {
-      fetchAnalytics();
+      fetchAnalytics(analyticsRange, analyticsPage, analyticsPageSize);
     }
-  }, [currentView]); // Only fetch when switching to analytics view
+  }, [currentView, analyticsRange, analyticsPage]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -195,6 +215,11 @@ function App() {
               metrics={analyticsData}
               isLoading={isAnalyticsLoading}
               onBack={() => setCurrentView('chat')}
+              range={analyticsRange}
+              onRangeChange={(days) => { setAnalyticsRange(days); setAnalyticsPage(1); }}
+              currentPage={analyticsPage}
+              onPageChange={setAnalyticsPage}
+              pageSize={analyticsPageSize}
             />
           )}
         </main>

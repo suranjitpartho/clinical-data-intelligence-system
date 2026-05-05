@@ -55,8 +55,8 @@ from fastapi.staticfiles import StaticFiles
 from app.services.analytics import analytics_service
 
 @app.get("/analytics")
-async def get_analytics():
-    return analytics_service.get_system_metrics()
+async def get_analytics(days: int = 7, page: int = 1, page_size: int = 10):
+    return analytics_service.get_system_metrics(days_back=days, page=page, page_size=page_size)
 
 @app.post("/query")
 async def process_query(request: QueryRequest):
