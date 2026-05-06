@@ -96,7 +96,9 @@ class ClinicalGraph:
                 "metadata": {
                     "source": os.getenv("ENV", "development"), 
                     "agent": "clinical-intelligence",
-                    "model": self.model_name
+                    "model": self.model_name,
+                    "langfuse_session_id": thread_id,
+                    "langfuse_tags": ["clinical-intelligence", self.model_name]
                 }
             }
             # Convert incoming history (dicts) to LangChain Message objects

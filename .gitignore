@@ -22,3 +22,6 @@ Thumbs.db
 
 # Agent Configuration
 .agents
+
+# Logs
+app.log

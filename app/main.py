@@ -1,4 +1,6 @@
 import os
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
 import json
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -57,6 +59,10 @@ from app.services.analytics import analytics_service
 @app.get("/analytics")
 async def get_analytics(days: int = 7, page: int = 1, page_size: int = 10):
     return analytics_service.get_system_metrics(days_back=days, page=page, page_size=page_size)
+
+@app.get("/analytics/operational")
+async def get_operational_analytics(days: int = 7, model: str = None):
+    return analytics_service.get_operational_analytics(days_back=days, model_filter=model)
 
 @app.post("/query")
 async def process_query(request: QueryRequest):

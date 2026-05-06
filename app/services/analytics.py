@@ -98,6 +98,7 @@ class AnalyticsService:
 
                     return {
                         "id": t.id,
+                        "session_id": getattr(t, 'session_id', None),
                         "timestamp": t.timestamp.isoformat() if hasattr(t.timestamp, 'isoformat') else str(t.timestamp),
                         "input": str(display_input)[:150],
                         "total_latency": f"{t.latency:.2f}s" if hasattr(t, 'latency') and t.latency else "N/A",
@@ -169,6 +170,115 @@ class AnalyticsService:
                     "page_size": page_size
                 },
                 "recent_traces": detailed_traces,
+                "cached_at": now.strftime("%H:%M:%S")
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_operational_analytics(self, days_back: int = 7, model_filter: str = None):
+        """Retrieve advanced operational metrics including trends, heatmap data, and model benchmarking."""
+        now = datetime.datetime.utcnow()
+        from_date = now - datetime.timedelta(days=days_back)
+        
+        try:
+            # 1. Daily Trends
+            daily_query = {
+                "view": "traces",
+                "metrics": [
+                    {"measure": "count", "aggregation": "count"},
+                    {"measure": "totalCost", "aggregation": "sum"},
+                    {"measure": "totalTokens", "aggregation": "sum"}
+                ],
+                "timeDimension": {"granularity": "day"},
+                "fromTimestamp": from_date.isoformat() + "Z",
+                "toTimestamp": now.isoformat() + "Z"
+            }
+            if model_filter:
+                daily_query["filters"] = [{"column": "tags", "operator": "contains", "value": model_filter}]
+                
+            daily_res = self.langfuse.api.metrics.metrics(query=json.dumps(daily_query))
+            daily_trends = daily_res.data if hasattr(daily_res, 'data') else []
+
+            # 2. Latency Heatmap Data (Hourly)
+            heatmap_query = {
+                "view": "traces",
+                "metrics": [{"measure": "latency", "aggregation": "avg"}],
+                "timeDimension": {"granularity": "hour"},
+                "fromTimestamp": from_date.isoformat() + "Z",
+                "toTimestamp": now.isoformat() + "Z"
+            }
+            if model_filter:
+                heatmap_query["filters"] = [{"column": "tags", "operator": "contains", "value": model_filter}]
+                
+            heatmap_res = self.langfuse.api.metrics.metrics(query=json.dumps(heatmap_query))
+            heatmap_raw = heatmap_res.data if hasattr(heatmap_res, 'data') else []
+
+            # 3. Model Comparison
+            comparison_query = {
+                "view": "traces",
+                "metrics": [
+                    {"measure": "count", "aggregation": "count"},
+                    {"measure": "latency", "aggregation": "avg"},
+                    {"measure": "totalCost", "aggregation": "sum"},
+                    {"measure": "totalTokens", "aggregation": "sum"}
+                ],
+                "dimensions": [{"field": "tags"}],
+                "fromTimestamp": from_date.isoformat() + "Z",
+                "toTimestamp": now.isoformat() + "Z"
+            }
+            comparison_res = self.langfuse.api.metrics.metrics(query=json.dumps(comparison_query))
+            comparison_data = comparison_res.data if hasattr(comparison_res, 'data') else []
+
+            # Calculate "Best Value" Model
+            best_model = None
+            min_score = float('inf')
+            
+            # Clean and process comparison data
+            formatted_comparison = []
+            available_models = []
+            
+            for m in comparison_data:
+                # Tags come back as a string, often with the clinical-intelligence tag
+                tag_list = m.get('tags') or []
+                if isinstance(tag_list, str):
+                    tag_list = [tag_list]
+                
+                # Identify the model name (assuming it's not the generic tag)
+                m_name = next((t for t in tag_list if t != "clinical-intelligence"), "Unknown")
+                available_models.append(m_name)
+                
+                count = int(m.get('count_count') or 0)
+                avg_lat = float(m.get('avg_latency') or 0) / 1000.0 # to seconds
+                total_cost = float(m.get('sum_totalCost') or 0)
+                total_tokens = int(m.get('sum_totalTokens') or 0)
+                
+                # Simple value score: Cost per token weighted by latency
+                # Lower is better
+                cost_per_token = (total_cost / total_tokens) if total_tokens > 0 else 0
+                value_score = cost_per_token * (avg_lat + 1) # weight cost by latency
+                
+                model_stats = {
+                    "model": m_name,
+                    "queries": count,
+                    "avg_latency": f"{avg_lat:.2f}s",
+                    "raw_latency": avg_lat,
+                    "total_cost": total_cost,
+                    "sum_totalTokens": total_tokens,
+                    "value_score": value_score
+                }
+                formatted_comparison.append(model_stats)
+                
+                if value_score > 0 and value_score < min_score:
+                    min_score = value_score
+                    best_model = m_name
+
+            return {
+                "daily_trends": daily_trends,
+                "heatmap_data": heatmap_raw,
+                "comparison": formatted_comparison,
+                "available_models": list(set(available_models)),
+                "best_value": best_model,
                 "cached_at": now.strftime("%H:%M:%S")
             }
 

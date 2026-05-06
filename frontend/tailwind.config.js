@@ -10,6 +10,7 @@ export default {
         'off-white': '#F9FAFB',
         'dark-grey': '#374151',
         'clinical-blue': '#06B6D4',
+        'clinical-lime': '#9AED1F',
       },
       fontFamily: {
         sans: ['"Inter"', 'sans-serif'],

@@ -26,7 +26,9 @@ function App() {
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const [traceLogs, setTraceLogs] = useState("");
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [operationalData, setOperationalData] = useState(null);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
+  const [analyticsSubView, setAnalyticsSubView] = useState('traces'); // 'traces' or 'operational'
   const [analyticsRange, setAnalyticsRange] = useState(7);      // days: 7, 15, 30
   const [analyticsPage, setAnalyticsPage] = useState(1);
   const [analyticsPageSize] = useState(10);
@@ -46,23 +48,35 @@ function App() {
       const res = await axios.get(`${API_BASE}/analytics`, {
         params: { days, page, page_size: pageSize }
       });
-      // Only replace data if we got a valid response — preserve stale data on Langfuse errors
       if (res.data && !res.data.error) {
         setAnalyticsData(prev => {
-          // If we are paginating (page > 1) and already have a summary, keep the stable summary
           const isPaginating = page > 1;
           return {
             ...res.data,
             summary: (isPaginating && prev?.summary) ? prev.summary : res.data.summary
           };
         });
-      } else if (res.data?.error) {
-        console.warn("Analytics fetch returned error:", res.data.error);
-        // Do NOT overwrite analyticsData — stale data stays visible
       }
     } catch (error) {
       console.error("Analytics fetch error:", error);
-      // Network error — also keep existing data
+    } finally {
+      setIsAnalyticsLoading(false);
+    }
+  };
+
+  const fetchOperationalAnalytics = async (days = analyticsRange) => {
+    setIsAnalyticsLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/analytics/operational`, {
+        params: { days }
+      });
+      // Accept data even if error field exists to show it in UI
+      if (res.data) {
+        setOperationalData(res.data);
+      }
+    } catch (error) {
+      console.error("Operational analytics fetch error:", error);
+      setOperationalData({ error: error.message });
     } finally {
       setIsAnalyticsLoading(false);
     }
@@ -71,9 +85,13 @@ function App() {
   // Refetch when range or page changes
   useEffect(() => {
     if (currentView === 'analytics') {
-      fetchAnalytics(analyticsRange, analyticsPage, analyticsPageSize);
+      if (analyticsSubView === 'traces') {
+        fetchAnalytics(analyticsRange, analyticsPage, analyticsPageSize);
+      } else {
+        fetchOperationalAnalytics(analyticsRange);
+      }
     }
-  }, [currentView, analyticsRange, analyticsPage]);
+  }, [currentView, analyticsRange, analyticsPage, analyticsSubView]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -213,6 +231,9 @@ function App() {
           ) : (
             <AnalyticsView
               metrics={analyticsData}
+              operationalData={operationalData}
+              subView={analyticsSubView}
+              setSubView={setAnalyticsSubView}
               isLoading={isAnalyticsLoading}
               onBack={() => setCurrentView('chat')}
               range={analyticsRange}
