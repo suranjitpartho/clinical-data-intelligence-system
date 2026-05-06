@@ -33,11 +33,11 @@ const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
           </div>
           <div className="text-right">
             <p className="text-[8px] text-gray-600 uppercase font-bold tracking-widest mb-0.5">Tokens</p>
-            <p className="text-xs font-display font-bold text-gray-300">{trace.total_tokens}</p>
+            <p className="text-xs font-display font-bold" style={{ color: '#06B6D4' }}>{trace.total_tokens}</p>
           </div>
           <div className="text-right min-w-[70px]">
             <p className="text-[8px] text-gray-600 uppercase font-bold tracking-widest mb-0.5">Cost</p>
-            <p className="text-xs font-display font-bold text-clinical-blue">
+            <p className="text-xs font-display font-bold" style={{ color: '#9AED1F' }}>
               {trace.total_cost > 0 ? `$${trace.total_cost.toFixed(5)}` : '$0.00000'}
             </p>
           </div>
@@ -66,9 +66,15 @@ const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[12px] font-bold text-gray-200 uppercase tracking-wider">{step.name}</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-[9px] font-bold text-gray-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">{step.latency}</span>
-                      <span className="text-[9px] font-bold text-gray-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">{step.tokens} TOKENS</span>
-                      <span className="text-[9px] font-bold text-clinical-blue bg-clinical-blue/5 px-1.5 py-0.5 rounded border border-clinical-blue/10">${step.cost.toFixed(5)}</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border" style={{ color: '#9CA3AF', borderColor: 'rgba(255, 255, 255, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.02)' }}>
+                        {step.latency}
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border" style={{ color: '#06B6D4', borderColor: 'rgba(6, 182, 212, 0.2)', backgroundColor: 'rgba(6, 182, 212, 0.05)' }}>
+                        {step.tokens} TOKENS
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border" style={{ color: '#9AED1F', borderColor: 'rgba(154, 237, 31, 0.2)', backgroundColor: 'rgba(154, 237, 31, 0.05)' }}>
+                        ${step.cost.toFixed(5)}
+                      </span>
                     </div>
                   </div>
                   <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">

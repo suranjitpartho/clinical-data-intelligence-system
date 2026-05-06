@@ -42,6 +42,8 @@ function App() {
     setCurrentView('chat');
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
     setIsAnalyticsLoading(true);
     try {
@@ -70,7 +72,6 @@ function App() {
       const res = await axios.get(`${API_BASE}/analytics/operational`, {
         params: { days }
       });
-      // Accept data even if error field exists to show it in UI
       if (res.data) {
         setOperationalData(res.data);
       }
@@ -79,6 +80,25 @@ function App() {
       setOperationalData({ error: error.message });
     } finally {
       setIsAnalyticsLoading(false);
+    }
+  };
+
+  const handleSyncAnalytics = async () => {
+    setIsSyncing(true);
+    try {
+      await axios.post(`${API_BASE}/analytics/sync`, null, {
+        params: { days: analyticsRange }
+      });
+      // After sync, immediately refresh local views from DB
+      await Promise.all([
+        fetchAnalytics(analyticsRange, 1, analyticsPageSize),
+        fetchOperationalAnalytics(analyticsRange)
+      ]);
+    } catch (error) {
+      console.error("Sync error:", error);
+      alert("Intelligence sync failed. Verify Langfuse connectivity.");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -235,6 +255,8 @@ function App() {
               subView={analyticsSubView}
               setSubView={setAnalyticsSubView}
               isLoading={isAnalyticsLoading}
+              isSyncing={isSyncing}
+              onSync={handleSyncAnalytics}
               onBack={() => setCurrentView('chat')}
               range={analyticsRange}
               onRangeChange={(days) => { setAnalyticsRange(days); setAnalyticsPage(1); }}

@@ -3,7 +3,7 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 import json
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from app.services.agent import clinical_agent
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,8 +25,7 @@ import csv
 import io
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy import text
-from app.db.base import SessionLocal
-
+from app.db.base import SessionLocal, engine, Base
 class QueryRequest(BaseModel):
     query: str
     model: str = None
@@ -63,6 +62,14 @@ async def get_analytics(days: int = 7, page: int = 1, page_size: int = 10):
 @app.get("/analytics/operational")
 async def get_operational_analytics(days: int = 7, model: str = None):
     return analytics_service.get_operational_analytics(days_back=days, model_filter=model)
+
+from app.services.observability_sync import obs_sync_service
+@app.post("/analytics/sync")
+async def sync_analytics(background_tasks: BackgroundTasks, days: int = 30):
+    # We ignore the 'days' parameter from the UI to ensure we always 
+    # sync a full 30-day window for data integrity.
+    background_tasks.add_task(obs_sync_service.sync_latest, days_back=30)
+    return {"status": "accepted", "message": "Synchronization started in background"}
 
 @app.post("/query")
 async def process_query(request: QueryRequest):
@@ -124,6 +131,7 @@ async def export_csv(request: ExportRequest):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=clinical_intelligence_export.csv"}
     )
+
 
 # --- UI Serving Logic ---
 # Mount the static files (React build) if the directory exists
