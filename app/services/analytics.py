@@ -135,19 +135,24 @@ class AnalyticsService:
             ]
 
             # 3. Model Benchmarking
-            # avg_latency only uses spans where latency > 0 (excludes unexecuted placeholder nodes)
-            # Excludes model=None and model='N/A' (nodes without an LLM generation)
+            # Uses SYNTHESIS as the "dominant model" identifier per trace.
+            # Avg latency is the full trace end-to-end time (true user-perceived latency),
+            # not just the node execution time. Joined via trace_id.
             model_query = db.query(
                 InferenceSpan.model,
                 func.count(InferenceSpan.id).label('queries'),
-                func.avg(InferenceSpan.latency).filter(InferenceSpan.latency > 0).label('avg_lat'),
+                func.avg(InferenceTrace.total_latency).label('avg_lat'),
                 func.sum(InferenceSpan.total_tokens).label('tokens'),
                 func.sum(InferenceSpan.total_cost).label('cost')
+            ).join(
+                InferenceTrace, InferenceTrace.trace_id == InferenceSpan.trace_id
             ).filter(
+                InferenceSpan.name == 'SYNTHESIS',
                 InferenceSpan.model != None,
                 InferenceSpan.model != 'N/A',
-                InferenceSpan.status == 'SUCCESS',
-                InferenceSpan.start_time >= from_date
+                InferenceTrace.status == 'SUCCESS',
+                InferenceTrace.total_latency > 0,
+                InferenceTrace.timestamp >= from_date
             ).group_by(InferenceSpan.model).all()
 
             formatted_comparison = []

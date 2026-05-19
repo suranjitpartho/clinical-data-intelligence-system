@@ -122,6 +122,28 @@ class ObservabilitySyncService:
         except:
             return str(data)[:500]
 
+    def _normalize_model_name(self, raw_model: str) -> str:
+        """Normalizes various provider-specific model strings into a single canonical base model name."""
+        if not raw_model or raw_model == 'N/A':
+            return 'N/A'
+        
+        m_lower = raw_model.lower()
+        
+        if 'llama-3.3-70b' in m_lower:
+            return 'Llama-3.3-70B'
+        if 'gpt-4o' in m_lower:
+            return 'GPT-4o'
+        if 'nemotron' in m_lower:
+            return 'Nemotron-3-120B'
+        if 'qwen3' in m_lower or 'qwen-3' in m_lower:
+            return 'Qwen-3-Coder'
+        if 'gpt-oss' in m_lower:
+            return 'GPT-OSS-120B'
+        if 'compound' in m_lower:
+            return 'Groq-Compound'
+            
+        return raw_model.upper()
+
     def _upsert_trace_data(self, db: Session, t_full):
         """Maps Langfuse Trace + Observations to our local Inference & Spans with Parent Rollup."""
         
@@ -151,20 +173,22 @@ class ObservabilitySyncService:
         # 2. First Pass: Prepare the 5 Core Clinical Spans
         WHITELIST = ['rewrite', 'classify', 'sql_tool', 'rag_tool', 'synthesis']
         observations = t_full.observations if hasattr(t_full, 'observations') else []
-        
-        # Local map for rolling up data
-        span_data = {name: {"tokens": 0, "in": 0, "out": 0, "cost": 0.0, "latency": 0.0, "start_time": None, "status": "SUCCESS", "error": None, "input": "", "output": "", "id": None, "model": "N/A"} for name in WHITELIST}
+        span_data = {name: {"ids": [], "tokens": 0, "in": 0, "out": 0, "cost": 0.0, "in_cost": 0.0, "out_cost": 0.0, "latency": 0.0, "start_time": None, "status": "SUCCESS", "error": None, "input": "", "output": "", "model": "N/A"} for name in WHITELIST}
 
         for obs in observations:
             name_lower = obs.name.lower()
             if name_lower in WHITELIST:
                 sd = span_data[name_lower]
-                sd["id"] = obs.id
-                sd["latency"] = float(getattr(obs, 'latency', 0) or 0)
-                sd["start_time"] = getattr(obs, 'start_time', None)
-                sd["input"] = str(getattr(obs, 'input', ''))
-                sd["output"] = str(getattr(obs, 'output', ''))
-                sd["model"] = getattr(obs, 'model', 'N/A')
+                sd["ids"].append(obs.id)
+                sd["latency"] += float(getattr(obs, 'latency', 0) or 0)
+                obs_start = getattr(obs, 'start_time', None)
+                if obs_start and (sd["start_time"] is None or obs_start < sd["start_time"]):
+                    sd["start_time"] = obs_start
+                sd["input"] = str(getattr(obs, 'input', '') or sd["input"])
+                sd["output"] = str(getattr(obs, 'output', '') or sd["output"])
+                obs_model = self._normalize_model_name(getattr(obs, 'model', 'N/A'))
+                if obs_model != 'N/A':
+                    sd["model"] = obs_model
                 if getattr(obs, 'level', 'DEFAULT') == 'ERROR':
                     sd["status"] = "ERROR"
                     sd["error"] = str(getattr(obs, 'status_message', 'Node Error'))
@@ -185,31 +209,36 @@ class ObservabilitySyncService:
                     tokens = int(getattr(usage, 'total', 0) or (in_t + out_t))
             
             cost = float(getattr(obs, 'calculated_total_cost', 0) or 0)
+            in_cost = float(getattr(obs, 'calculated_input_cost', 0) or 0)
+            out_cost = float(getattr(obs, 'calculated_output_cost', 0) or 0)
             
             # Always add to Trace-level totals
             trace_record.total_tokens += tokens
             trace_record.total_cost += cost
 
             # Rollup to the specific clinical parent node
+            # Check against all ids since a node may have run multiple times
             parent_id = getattr(obs, 'parent_observation_id', None)
             if parent_id:
                 for name, sd in span_data.items():
-                    if sd["id"] == parent_id:
+                    if parent_id in sd["ids"]:
                         sd["tokens"] += tokens
                         sd["in"] += in_t
                         sd["out"] += out_t
                         sd["cost"] += cost
+                        sd["in_cost"] += in_cost
+                        sd["out_cost"] += out_cost
                         if obs.type == 'GENERATION':
-                            sd["model"] = getattr(obs, 'model', sd["model"])
+                            sd["model"] = self._normalize_model_name(getattr(obs, 'model', sd["model"]))
 
         # 4. Final Pass: Clear existing noise and Commit Clean Spans
         db.query(InferenceSpan).filter(InferenceSpan.trace_id == t_full.id).delete()
         
         for name, sd in span_data.items():
-            if not sd["id"]: continue # Node didn't run
+            if not sd["ids"]: continue  # Node didn't run at all
 
             span_record = InferenceSpan(
-                span_id=sd["id"], 
+                span_id=sd["ids"][0],  # use first observation id as primary key
                 trace_id=t_full.id,
                 name=name.upper(),
                 span_type="NODE",
@@ -219,6 +248,8 @@ class ObservabilitySyncService:
                 input_tokens=sd["in"],
                 output_tokens=sd["out"],
                 total_tokens=sd["tokens"],
+                input_cost=sd["in_cost"],
+                output_cost=sd["out_cost"],
                 total_cost=sd["cost"],
                 input_data=sd["input"],
                 output_data=sd["output"],
