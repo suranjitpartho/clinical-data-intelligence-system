@@ -28,7 +28,7 @@ const AnalyticsView = ({
 }) => {
   const [expandedTrace, setExpandedTrace] = useState(null);
 
-  const summary = metrics?.summary || { total_queries: 0, avg_latency: '0s', total_tokens: '0', total_cost: '$0.00' };
+  const summary = metrics?.summary || { total_queries: 0, error_queries: 0, avg_latency: '0s', total_tokens: '0', total_cost: '$0.00' };
   const traces = metrics?.recent_traces || [];
   const pagination = metrics?.pagination || { current_page: 1, total_pages: 1, total_items: 0, page_size: pageSize };
   const groupedTraces = [];
@@ -133,13 +133,45 @@ const AnalyticsView = ({
 
         {subView === 'traces' ? (
           <>
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
-              <StatCard label="Inference Queries" value={summary.total_queries} icon={<Activity size={16} />} iconColor="#06B6D4" />
-              <StatCard label="Agent Latency"     value={summary.avg_latency}   icon={<Clock    size={16} />} iconColor="#06B6D4" />
-              <StatCard label="Token Usage"       value={summary.total_tokens}  icon={<Zap      size={16} />} iconColor="#06B6D4" />
-              <StatCard label="Compute Expense"   value={summary.total_cost}    icon={<BarChart3 size={16} />} iconColor="#9AED1F" />
-            </div>
+             {/* Stats Grid */}
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
+               <StatCard 
+                 label="Inference Queries" 
+                 value={summary.total_queries} 
+                 suffix="Queries"
+                 icon={<Activity size={16} />} 
+                 iconColor="#06B6D4" 
+                 footerLeft="Failed Traces"
+                 footerRight={`${summary.error_queries || 0} Error${(summary.error_queries || 0) === 1 ? '' : 's'}`}
+                 footerRightColor={(summary.error_queries || 0) > 0 ? '#EF4444' : '#06B6D4'}
+               />
+               <StatCard 
+                 label="Agent Latency" 
+                 value={summary.avg_latency} 
+                 icon={<Clock size={16} />} 
+                 iconColor="#06B6D4" 
+                 footerLeft="Metric Type"
+                 footerRight="Success Avg"
+               />
+               <StatCard 
+                 label="Token Usage" 
+                 value={summary.total_tokens} 
+                 suffix="Tokens"
+                 icon={<Zap size={16} />} 
+                 iconColor="#06B6D4" 
+                 footerLeft="Calculation"
+                 footerRight="Cumulative"
+               />
+               <StatCard 
+                 label="Compute Expense" 
+                 value={summary.total_cost} 
+                 suffix="USD"
+                 icon={<BarChart3 size={16} />} 
+                 iconColor="#9AED1F" 
+                 footerLeft="Calculated"
+                 footerRight="Live Cache"
+               />
+             </div>
 
             {/* Trace List */}
             <div className="space-y-6">

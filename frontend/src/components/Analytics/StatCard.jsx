@@ -1,14 +1,43 @@
 import React from 'react';
 
-const StatCard = ({ label, value, icon, iconColor = '#06B6D4', hoverColor = '#06B6D4' }) => (
-  <div className="bg-slate-900/60 backdrop-blur-md p-5 rounded-md border border-white/10 hover:border-white/20 transition-all duration-300 group">
-    <div className="p-2 bg-white/5 w-fit rounded-md mb-4 transition-colors border border-white/5" style={{ color: iconColor }}>{icon}</div>
+const StatCard = ({ 
+  label, 
+  value, 
+  suffix,
+  icon, 
+  iconColor = '#06B6D4', 
+  footerLeft, 
+  footerRight,
+  footerRightColor
+}) => (
+  <div className="bg-slate-900/60 backdrop-blur-md p-4 rounded-md border border-white/10 flex flex-col justify-between h-full hover:border-white/20 transition-all duration-300">
     <div>
-      <p className="text-xl font-display font-bold tracking-tight transition-all duration-300" style={{ color: iconColor }}>
-        {value}
-      </p>
-      <p className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1.5">{label}</p>
+      {/* Header Row */}
+      <div className="flex items-center gap-2 mb-4">
+        <span style={{ color: iconColor }}>{icon}</span>
+        <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em]">{label}</h3>
+      </div>
+      
+      {/* Value Row */}
+      <div>
+        <span className="text-xl font-display font-bold text-white tracking-tight">
+          {value}
+        </span>
+        {suffix && (
+          <span className="text-[9px] font-bold text-gray-500 ml-1.5 uppercase tracking-widest">
+            {suffix}
+          </span>
+        )}
+      </div>
     </div>
+
+    {/* Footer Row */}
+    {(footerLeft || footerRight) && (
+      <div className="mt-3 pt-3 border-t border-white/5 flex justify-between text-[8px] font-bold uppercase tracking-widest">
+        {footerLeft && <span className="text-gray-500">{footerLeft}</span>}
+        {footerRight && <span style={{ color: footerRightColor || iconColor }}>{footerRight}</span>}
+      </div>
+    )}
   </div>
 );
 

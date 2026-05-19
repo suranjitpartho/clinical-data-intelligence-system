@@ -1,9 +1,12 @@
 import React from 'react';
-import { Search, ChevronRight, Database } from 'lucide-react';
-
+import { Search, ChevronRight, Database, AlertTriangle } from 'lucide-react';
 const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
+  const isError = trace.status === 'ERROR';
+
   return (
-    <div className={`bg-[#0F172A]/80 backdrop-blur-md rounded-lg border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-clinical-blue/40' : 'border-white/10 hover:border-white/20'}`}>
+    <div className={`bg-[#0F172A]/80 backdrop-blur-md rounded-lg border transition-all duration-300 overflow-hidden ${
+      isExpanded ? 'border-clinical-blue/40' : 'border-white/10 hover:border-white/20'
+    }`}>
       <div
         onClick={() => onToggleExpand(isExpanded ? null : trace.id)}
         className="p-4 flex items-start justify-between cursor-pointer group"
@@ -22,6 +25,13 @@ const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
               </p>
               <span className="w-1 h-1 bg-gray-700 rounded-full"></span>
               <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">ID: {trace.id.slice(-8)}</span>
+              {isError && (
+                <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border"
+                  style={{ color: '#F87171', borderColor: 'rgba(248, 113, 113, 0.3)', backgroundColor: 'rgba(248, 113, 113, 0.08)' }}>
+                  <AlertTriangle size={9} />
+                  ERROR
+                </span>
+              )}
             </div>
           </div>
         </div>

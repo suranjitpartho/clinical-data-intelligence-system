@@ -34,7 +34,14 @@ const OperationalView = ({ data, isLoading, days_back }) => {
     );
   }
 
-  const { daily_trends = [], heatmap_data = [], comparison = [], best_value = "Pending" } = data;
+  const { 
+    daily_trends = [], 
+    heatmap_data = [], 
+    comparison = [], 
+    best_value = "Pending",
+    total_input_cost = 0,
+    total_output_cost = 0
+  } = data;
 
   const trendData = useMemo(() => {
     if (daily_trends.length < 2) return null;
@@ -88,46 +95,69 @@ const OperationalView = ({ data, isLoading, days_back }) => {
       
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="md:col-span-2 rounded-md border border-white/10 bg-slate-900/60 backdrop-blur-md p-4 relative overflow-hidden group">
+        <div className="rounded-md border border-white/10 bg-slate-900/60 backdrop-blur-md p-4 relative overflow-hidden group flex flex-col justify-between">
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-4">
               <Award style={{ color: '#9AED1F' }} size={16} />
               <h3 className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.3em]">Strategic Recommendation</h3>
             </div>
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-gray-500 text-[9px] mb-0.5 uppercase font-medium">Top Efficiency Model</p>
-                <h2 className="text-xl font-display font-bold text-white tracking-tight">
-                  {best_value} <span style={{ color: '#9AED1F' }} className="opacity-80 text-sm">★</span>
-                </h2>
-                <p className="text-gray-500 text-[9px] mt-2 max-w-sm leading-relaxed uppercase tracking-wider">
-                  Optimal balance of economy and speed for clinical workloads.
-                </p>
-              </div>
-              <div className="hidden md:block">
-                <div className="px-2 py-1 rounded-md text-[8px] font-bold uppercase tracking-widest border border-[#9AED1F]/20 bg-[#9AED1F]/5 text-[#9AED1F]">
-                  Best Value
-                </div>
-              </div>
+            <div>
+              <p className="text-gray-500 text-[9px] mb-0.5 uppercase font-medium">Top Efficiency Model</p>
+              <h2 className="text-lg font-display font-bold text-white tracking-tight truncate">
+                {best_value} <span style={{ color: '#9AED1F' }} className="opacity-80 text-[10px]">★</span>
+              </h2>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
+            <span className="text-gray-500 text-[9px] font-bold uppercase tracking-widest">Efficiency Status</span>
+            <div className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest border border-[#9AED1F]/20 bg-[#9AED1F]/5 text-[#9AED1F]">
+              Best Value
             </div>
           </div>
         </div>
 
         <div className="rounded-md border border-white/10 bg-slate-900/60 backdrop-blur-md p-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="text-clinical-blue" size={16} />
-            <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em]">Usage Volume</h3>
-          </div>
           <div>
-            <span className="text-2xl font-bold text-white tracking-tighter">
-              {daily_trends.reduce((acc, d) => acc + (Number(d.sum_totalTokens) || 0), 0).toLocaleString()}
-            </span>
-            <span className="text-[9px] font-bold text-gray-500 ml-1.5 uppercase tracking-widest">Tokens</span>
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="text-clinical-blue" size={16} />
+              <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em]">Usage Volume</h3>
+            </div>
+            <div>
+              <span className="text-xl font-display font-bold text-white tracking-tight">
+                {daily_trends.reduce((acc, d) => acc + (Number(d.sum_totalTokens) || 0), 0).toLocaleString()}
+              </span>
+              <span className="text-[9px] font-bold text-gray-500 ml-1.5 uppercase tracking-widest">Tokens</span>
+            </div>
           </div>
           <div className="mt-3 pt-3 border-t border-white/5">
             <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest">
-              <span className="text-gray-500">Peak Model</span>
-              <span className="text-white truncate max-w-[100px]">{comparison[0]?.model || 'N/A'}</span>
+              <span className="text-gray-500">Active Window</span>
+              <span className="text-clinical-blue">{days_back} Days</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-white/10 bg-slate-900/60 backdrop-blur-md p-4 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-[#9AED1F] font-bold text-sm">$</span>
+              <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em]">Financial Breakdown</h3>
+            </div>
+            <div>
+              <span className="text-xl font-display font-bold text-white tracking-tight">
+                ${daily_trends.reduce((acc, d) => acc + (Number(d.sum_totalCost) || 0), 0).toFixed(5)}
+              </span>
+              <span className="text-[9px] font-bold text-gray-500 ml-1.5 uppercase tracking-widest">USD</span>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-white/5 flex justify-between text-[8px] font-bold uppercase tracking-widest">
+            <div>
+              <span className="text-gray-500 mr-1">In:</span>
+              <span className="text-clinical-blue">${(total_input_cost || 0).toFixed(5)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 mr-1">Out:</span>
+              <span className="text-[#9AED1F]">${(total_output_cost || 0).toFixed(5)}</span>
             </div>
           </div>
         </div>
@@ -179,7 +209,7 @@ const OperationalView = ({ data, isLoading, days_back }) => {
                 <circle cx={trendData.tokenPeakCoord.x} cy={trendData.tokenPeakCoord.y} r="5" fill="#06B6D4" />
                 <text 
                   x={trendData.tokenPeakCoord.x} 
-                  y={trendData.tokenPeakCoord.y - 20} 
+                  y={trendData.tokenPeakCoord.y - 28} 
                   textAnchor={trendData.tokenPeakCoord.x > 700 ? "end" : "middle"}
                   className="font-display font-black"
                   style={{ fill: '#06B6D4', fontSize: '18px' }}
@@ -191,7 +221,7 @@ const OperationalView = ({ data, isLoading, days_back }) => {
                 <circle cx={trendData.costPeakCoord.x} cy={trendData.costPeakCoord.y} r="5" fill="#9AED1F" />
                 <text 
                   x={trendData.costPeakCoord.x} 
-                  y={trendData.costPeakCoord.y - 20} 
+                  y={trendData.costPeakCoord.y - 8} 
                   textAnchor={trendData.costPeakCoord.x > 700 ? "end" : "middle"}
                   className="font-display font-black"
                   style={{ fill: '#9AED1F', fontSize: '18px' }}
