@@ -5,6 +5,7 @@ from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.services.agent.state import AgentState
 from app.services.schema_introspector import get_fk_relationship_map
+from app.services.query_cache import save_to_cache
 from app.services.prompts import (
     SQL_GENERATION_PROMPT, 
     DISCOVERY_PROMPT, 
@@ -125,6 +126,12 @@ def sql_node(state: AgentState, config, llm):
                 except Exception:
                     continue # Silently fail if ref query fails to avoid crashing main flow
 
+        # --- Write to Semantic Query Cache ---
+        try:
+            save_to_cache(query, sql)
+        except Exception as ce:
+            print(f"Failed to cache generated SQL: {ce}")
+
         session.close() 
         
         # --- Structured Tool Response ---
@@ -153,9 +160,8 @@ def sql_node(state: AgentState, config, llm):
         session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
         session.close()
         
-        # Truncate large SQL in logs to keep the Reason Trace readable
-        sql_snippet = sql[:200] + "..." if len(sql) > 200 else sql
-        error_msg = f"\nERROR at attempt {error_count+1}: {str(e)[:150]}...\n[SQL Snippet]: {sql_snippet}"
+        # Keep trace clean—no SQL snippets, just user-friendly message
+        error_msg = f"\n• Database query failed at attempt {error_count+1}\n• Refining approach and retrying..."
         
         # Explicitly inform the state of the failure
         return {

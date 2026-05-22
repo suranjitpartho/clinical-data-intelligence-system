@@ -57,13 +57,27 @@ const AnalyticsView = ({
         {/* Header Section: Static 2-Row Layout to prevent flickering */}
         <div className="mb-10">
           {/* Row 1: Identity */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-display font-normal text-white tracking-tight">
-              LLM Observability
-            </h1>
-            <p className="text-gray-500 text-[10px] mt-1 font-bold uppercase tracking-[0.2em]">
-              Inference Tracing & Operational Performance
-            </p>
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-display font-normal text-white tracking-tight">
+                LLM Observability
+              </h1>
+              <p className="text-gray-500 text-[10px] mt-1 font-bold uppercase tracking-[0.2em]">
+                Inference Tracing & Operational Performance
+              </p>
+            </div>
+            <button
+              onClick={onSync}
+              disabled={isSyncing}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[9px] font-bold uppercase tracking-widest border transition-all duration-500 ${
+                isSyncing 
+                  ? 'bg-white/5 text-gray-600 border-white/5 cursor-not-allowed'
+                  : 'bg-white/5 text-gray-400 border-white/10 hover:border-clinical-blue/40 hover:text-clinical-blue hover:bg-white/10'
+              }`}
+            >
+              <Activity size={12} className={isSyncing ? 'animate-spin' : ''} />
+              {isSyncing ? 'Syncing...' : 'Sync Langfuse'}
+            </button>
           </div>
 
           {/* Row 2: Control Strip (Compact & Unified) */}
@@ -93,22 +107,6 @@ const AnalyticsView = ({
                 Operations
               </button>
             </div>
-
-            <div className="h-6 w-px bg-white/5 mx-2 hidden md:block" />
-
-            {/* Sync Trigger */}
-            <button
-              onClick={onSync}
-              disabled={isSyncing}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] border transition-all duration-500 ${
-                isSyncing 
-                  ? 'bg-white/5 text-gray-600 border-white/5 cursor-not-allowed'
-                  : 'bg-white/5 text-gray-400 border-white/10 hover:border-clinical-blue/40 hover:text-clinical-blue hover:bg-white/10'
-              }`}
-            >
-              <Activity size={14} className={isSyncing ? 'animate-spin' : ''} />
-              {isSyncing ? 'Syncing...' : 'Sync Langfuse'}
-            </button>
 
             <div className="ml-auto flex items-center gap-2">
               <span className="text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] mr-2">Range</span>
@@ -143,7 +141,7 @@ const AnalyticsView = ({
                  iconColor="#06B6D4" 
                  footerLeft="Failed Traces"
                  footerRight={`${summary.error_queries || 0} Error${(summary.error_queries || 0) === 1 ? '' : 's'}`}
-                 footerRightColor={(summary.error_queries || 0) > 0 ? '#EF4444' : '#06B6D4'}
+                 footerRightColor={(summary.error_queries || 0) > 0 ? '#F87171' : '#06B6D4'}
                />
                <StatCard 
                  label="Agent Latency" 

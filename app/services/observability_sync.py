@@ -162,7 +162,10 @@ class ObservabilitySyncService:
         trace_record.total_tokens = 0
         trace_record.total_cost = 0.0
         
-        trace_record.status = "SUCCESS"
+        # Determine status from trace level in Langfuse
+        trace_record.status = "ERROR" if getattr(t_full, 'level', 'DEFAULT') == 'ERROR' else "SUCCESS"
+        if trace_record.status == "ERROR":
+            trace_record.error_message = getattr(t_full, 'status_message', 'Trace execution failed.')
         
         # Intelligent Clinical Cleanup for Previews
         raw_input = getattr(t_full, 'input', '')
@@ -170,8 +173,8 @@ class ObservabilitySyncService:
         trace_record.input_preview = self._clean_clinical_data(raw_input)
         trace_record.output_preview = self._clean_clinical_data(raw_output)
         
-        # 2. First Pass: Prepare the 5 Core Clinical Spans
-        WHITELIST = ['rewrite', 'classify', 'sql_tool', 'rag_tool', 'synthesis']
+        # 2. First Pass: Prepare the 6 Core Clinical Spans
+        WHITELIST = ['rewrite', 'cache_check', 'classify', 'sql_tool', 'rag_tool', 'synthesis']
         observations = t_full.observations if hasattr(t_full, 'observations') else []
         span_data = {name: {"ids": [], "tokens": 0, "in": 0, "out": 0, "cost": 0.0, "in_cost": 0.0, "out_cost": 0.0, "latency": 0.0, "start_time": None, "status": "SUCCESS", "error": None, "input": "", "output": "", "model": "N/A"} for name in WHITELIST}
 

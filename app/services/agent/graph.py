@@ -13,6 +13,7 @@ from app.services.agent.provider import get_llm
 from app.services.agent.nodes.query import rewrite_node, intent_node
 from app.services.agent.nodes.tools import sql_node, rag_node
 from app.services.agent.nodes.answer import synthesis_node
+from app.services.agent.nodes.cache import cache_node
 
 class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
@@ -20,6 +21,11 @@ class ClinicalGraph:
         self.llm = get_llm(provider, model_name)
         self.memory = MemorySaver()
         self.workflow = self._create_workflow()
+
+    def route_from_cache(self, state: AgentState):
+        if state.get("cache_hit"):
+            return "synthesis"
+        return "classify"
 
     def route_from_classify(self, state: AgentState):
         tools = state.get("tools_needed", [])
@@ -43,6 +49,7 @@ class ClinicalGraph:
         
         # Add Nodes with explicit names for tracking
         graph.add_node("rewrite", lambda state, config: rewrite_node(state, config, self.llm))
+        graph.add_node("cache_check", cache_node)
         graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
         graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
         graph.add_node("rag_tool", rag_node)
@@ -50,7 +57,16 @@ class ClinicalGraph:
         
         # Add Edges
         graph.set_entry_point("rewrite")
-        graph.add_edge("rewrite", "classify")
+        graph.add_edge("rewrite", "cache_check")
+        
+        graph.add_conditional_edges(
+            "cache_check",
+            self.route_from_cache,
+            {
+                "synthesis": "synthesis",
+                "classify": "classify"
+            }
+        )
         
         graph.add_conditional_edges(
             "classify",
@@ -120,17 +136,37 @@ class ClinicalGraph:
                 "medical_context": [],
                 "final_answer": None,
                 "error_count": 0,
-                "logs": ""
+                "logs": "",
+                "cache_hit": None
             }
             
             final_output = self.workflow.invoke(initial_state, config=config)
+            
+            # Determine success/failure status dynamically
+            tool_query = final_output.get("tool_query")
+            status = "Success"
+            if (tool_query and "ERROR" in tool_query) or final_output.get("is_error"):
+                status = "Error"
+
+            # Proactively update Langfuse trace level if it failed
+            if status == "Error" and callbacks:
+                try:
+                    trace_id = callbacks[0].get_trace_id()
+                    if trace_id:
+                        callbacks[0].langfuse.trace(
+                            id=trace_id,
+                            level="ERROR",
+                            status_message=tool_query or "Query execution failed."
+                        )
+                except Exception as le:
+                    print(f"Warning: Failed to update Langfuse trace level: {le}")
             
             # Persist to Audit Log
             log = AuditLog(
                 user_query=query,
                 tool_used=", ".join(final_output.get("tools_needed", [])),
-                tool_query=final_output.get("tool_query"),
-                status="Success",
+                tool_query=tool_query,
+                status=status,
                 result_summary=final_output["final_answer"][:500] if final_output["final_answer"] else "Complete"
             )
             db.add(log)
