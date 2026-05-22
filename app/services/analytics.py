@@ -2,7 +2,8 @@ import os
 import datetime
 import json
 from langfuse import Langfuse
-from concurrent.futures import ThreadPoolExecutor
+from app.db.base import SessionLocal
+from sqlalchemy import func, desc
 
 class AnalyticsService:
     def __init__(self):
@@ -11,136 +12,224 @@ class AnalyticsService:
             secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
             host=os.getenv("LANGFUSE_HOST")
         )
-        self._cache = None
-        self._last_updated = None
         self._cache_duration = datetime.timedelta(minutes=5)
 
-    def get_system_metrics(self):
-        """Retrieve and cache system metrics from Langfuse."""
-        now = datetime.datetime.now()
+    def get_system_metrics(self, days_back: int = 7, page: int = 1, page_size: int = 10):
+        """Retrieve system metrics from the Local Observability Cache.
+        Provides instant, paginated access to all traces and their deep details.
+        """
+        from app.models.observability import InferenceTrace, InferenceSpan
+        from app.db.base import SessionLocal
+        from sqlalchemy import desc
         
-        if self._cache and self._last_updated and (now - self._last_updated) < self._cache_duration:
-            return self._cache
-
+        db = SessionLocal()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        from_date = now - datetime.timedelta(days=days_back)
+        
         try:
-            traces = self.langfuse.api.trace.list(limit=20)
-            trace_list = traces.data if hasattr(traces, 'data') else []
-            total_traces = len(trace_list)
+            # 2. Get Overall Summary — counts/tokens/cost include all traces; avg latency only from SUCCESS
+            summary_res = db.query(
+                func.count(InferenceTrace.id).label('total'),
+                func.sum(InferenceTrace.total_tokens).label('tokens'),
+                func.sum(InferenceTrace.total_cost).label('cost')
+            ).filter(InferenceTrace.timestamp >= from_date).first()
+
+            # Avg latency: SUCCESS traces only (excludes token-limit crashes / errors)
+            avg_lat = db.query(func.avg(InferenceTrace.total_latency)).filter(
+                InferenceTrace.timestamp >= from_date,
+                InferenceTrace.status == 'SUCCESS'
+            ).scalar() or 0.0
+
+            # Count of failed/error traces
+            error_count = db.query(func.count(InferenceTrace.id)).filter(
+                InferenceTrace.timestamp >= from_date,
+                InferenceTrace.status == 'ERROR'
+            ).scalar() or 0
+
+            # 3. Get Recent Traces (Paginated)
+            total_count = db.query(InferenceTrace).filter(InferenceTrace.timestamp >= from_date).count()
             
-            # Limit processing to recent 10 for performance
-            recent_traces = trace_list[:10]
-            
-            def fetch_trace_details(t):
-                try:
-                    observations = self.langfuse.api.observations.get_many(trace_id=t.id, limit=40)
-                    obs_list = observations.data if hasattr(observations, 'data') else []
-                    
-                    steps = []
-                    trace_tokens = 0
-                    
-                    # Group metrics by logical LangGraph node
-                    node_data = {}
-                    
-                    # Sort by start_time to respect execution sequence
-                    sorted_obs = sorted(obs_list, key=lambda x: x.start_time if hasattr(x, 'start_time') else datetime.datetime.min)
+            traces = db.query(InferenceTrace).filter(
+                InferenceTrace.timestamp >= from_date
+            ).order_by(desc(InferenceTrace.timestamp)).offset((page - 1) * page_size).limit(page_size).all()
 
-                    for obs in sorted_obs:
-                        # Resolve node identity from metadata where possible
-                        node_name = str(obs.name)
-                        if hasattr(obs, 'metadata') and obs.metadata:
-                            node_name = obs.metadata.get('langgraph_node') or obs.metadata.get('node') or node_name
-                        
-                        # Map native usage and costing metrics
-                        step_cost = getattr(obs, 'calculated_total_cost', 0) or 0
-                        step_tokens = 0
-                        if hasattr(obs, 'usage') and obs.usage:
-                            u = obs.usage
-                            step_tokens = getattr(u, 'total', 0) or (getattr(u, 'input', 0) + getattr(u, 'output', 0)) or 0
-                        
-                        if node_name not in node_data:
-                            node_data[node_name] = {
-                                "tokens": 0, 
-                                "latency": 0, 
-                                "cost": 0,
-                                "first_seen": obs.start_time if hasattr(obs, 'start_time') else datetime.datetime.min
-                            }
-                        
-                        node_data[node_name]["tokens"] += step_tokens
-                        node_data[node_name]["cost"] += float(step_cost)
-                        node_data[node_name]["latency"] = max(node_data[node_name]["latency"], getattr(obs, 'latency', 0) or 0)
+            trace_list = []
+            for t in traces:
+                trace_list.append({
+                    "id": str(t.trace_id),
+                    "session_id": t.session_id,
+                    "timestamp": t.timestamp.isoformat(),
+                    "input": t.input_preview or "Clinical Consultation",
+                    "output": t.output_preview or "",
+                    "total_latency": f"{t.total_latency:.2f}s",
+                    "total_tokens": int(t.total_tokens or 0),
+                    "total_cost": float(t.total_cost or 0),
+                    "status": t.status,
+                    "error_message": t.error_message,
+                    "steps": [
+                        {
+                            "name": s.name,
+                            "latency": f"{s.latency:.2f}s",
+                            "tokens": s.total_tokens,
+                            "cost": float(s.total_cost or 0),
+                            "status": s.status or "SUCCESS",
+                            "input_data": s.input_data,
+                            "output_data": s.output_data
+                        } for s in sorted(t.spans, key=lambda x: x.start_time or datetime.datetime.min)
+                    ]
+                })
 
-                    # Return nodes in chronological order
-                    sorted_nodes = sorted(node_data.items(), key=lambda x: x[1]['first_seen'])
-
-                    for name, data in sorted_nodes:
-                        # Skip container and technical nodes
-                        if any(x in name for x in ["ChatOpenAI", "ChatGroq", "Generation", "LangGraph"]):
-                            continue
-                        
-                        steps.append({
-                            "name": name.replace('_', ' ').title(),
-                            "latency": f"{data['latency']:.2f}s",
-                            "tokens": int(data['tokens']),
-                            "cost": float(data['cost'])
-                        })
-                        trace_tokens += data['tokens']
-
-                    trace_total_cost = float(getattr(t, 'total_cost', 0) or sum(d['cost'] for d in node_data.values()))
-
-                    # Extract primary query from input payload
-                    display_input = "Clinical consultation"
-                    try:
-                        inp = t.input
-                        if isinstance(inp, str) and inp.startswith('{'):
-                            try: inp = json.loads(inp.replace("'", '"'))
-                            except: pass
-                        
-                        if isinstance(inp, dict):
-                            display_input = inp.get('QUERY') or inp.get('query') or next(iter(inp.values())) or "Query"
-                        else:
-                            display_input = str(inp)
-                    except:
-                        display_input = str(t.input)
-
-                    return {
-                        "id": t.id,
-                        "timestamp": t.timestamp.isoformat() if hasattr(t.timestamp, 'isoformat') else str(t.timestamp),
-                        "input": str(display_input)[:150],
-                        "total_latency": f"{t.latency:.2f}s" if hasattr(t, 'latency') and t.latency else "N/A",
-                        "total_tokens": int(trace_tokens),
-                        "total_cost": float(trace_total_cost),
-                        "steps": steps,
-                        "raw_latency": t.latency or 0
-                    }
-                except Exception as e:
-                    return None
-
-            # Execute trace hydration in parallel
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                detailed_traces = list(filter(None, executor.map(fetch_trace_details, recent_traces)))
-
-            # Aggregate final summary metrics
-            agg_tokens = sum(dt['total_tokens'] for dt in detailed_traces)
-            agg_cost = sum(dt['total_cost'] for dt in detailed_traces)
-            agg_latencies = [dt['raw_latency'] for dt in detailed_traces if dt['raw_latency'] > 0]
-            avg_lat = sum(agg_latencies)/len(agg_latencies) if agg_latencies else 0
-
-            result = {
+            agg_tokens = float(summary_res.tokens or 0)
+            agg_cost = float(summary_res.cost or 0)
+            avg_lat = float(avg_lat)
+            return {
                 "summary": {
-                    "total_queries": total_traces,
+                    "total_queries": int(summary_res.total or 0),
+                    "error_queries": int(error_count),
                     "avg_latency": f"{avg_lat:.2f}s",
-                    "total_tokens": f"{agg_tokens/1000:.1f}k" if agg_tokens > 0 else "0",
+                    "total_tokens": f"{agg_tokens/1000:.1f}k" if agg_tokens > 1000 else str(int(agg_tokens)),
                     "total_cost": f"${agg_cost:.5f}" if agg_cost > 0 else "$0.00000"
                 },
-                "recent_traces": detailed_traces,
+                "pagination": {
+                    "current_page": page,
+                    "total_pages": (total_count // page_size) + (1 if total_count % page_size > 0 else 0),
+                    "total_items": total_count,
+                    "page_size": page_size
+                },
+                "recent_traces": trace_list,
                 "cached_at": now.strftime("%H:%M:%S")
             }
-            
-            self._cache = result
-            self._last_updated = now
-            return result
+        finally:
+            db.close()
 
-        except Exception as e:
-            return self._cache if self._cache else {"error": str(e)}
+    def get_operational_analytics(self, days_back: int = 7, model_filter: str = None):
+        """High-Performance Aggregator using the Local Observability Cache."""
+        from app.services.observability_sync import obs_sync_service
+        from app.models.observability import InferenceTrace, InferenceSpan
+        
+        db = SessionLocal()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        from_date = now - datetime.timedelta(days=days_back)
+        
+        try:
+            # 1. Daily Trends (Zero-filled for all days in window to keep charts active)
+            daily_query = db.query(
+                func.date(InferenceTrace.timestamp).label('date'),
+                func.sum(InferenceTrace.total_tokens).label('tokens'),
+                func.sum(InferenceTrace.total_cost).label('cost')
+            ).filter(InferenceTrace.timestamp >= from_date).group_by(func.date(InferenceTrace.timestamp)).all()
+            
+            db_trends = {str(res.date): (int(res.tokens or 0), float(res.cost or 0)) for res in daily_query}
+            
+            # Detect local timezone to align date generation with database session timezone
+            local_tz = datetime.datetime.now().astimezone().tzinfo
+            now_local = now.astimezone(local_tz)
+            from_date_local = from_date.astimezone(local_tz)
+            
+            start_date = from_date_local.date()
+            end_date = now_local.date()
+            
+            formatted_trends = []
+            current_date = start_date
+            while current_date <= end_date:
+                day_str = str(current_date)
+                tokens, cost = db_trends.get(day_str, (0, 0.0))
+                formatted_trends.append({
+                    "time_dimension": f"{day_str}T00:00:00Z",
+                    "sum_totalTokens": tokens,
+                    "sum_totalCost": cost
+                })
+                current_date += datetime.timedelta(days=1)
+
+            # 2. Hourly Heatmap (Success traces only)
+            hour_query = db.query(
+                func.date_trunc('hour', InferenceTrace.timestamp).label('hour'),
+                func.avg(InferenceTrace.total_latency).label('avg_lat')
+            ).filter(
+                InferenceTrace.timestamp >= from_date,
+                InferenceTrace.status == 'SUCCESS'
+            ).group_by(func.date_trunc('hour', InferenceTrace.timestamp)).all()
+
+            formatted_heatmap = []
+            for res in hour_query:
+                dt = res.hour
+                if dt and dt.tzinfo:
+                    dt = dt.astimezone(datetime.timezone.utc)
+                formatted_heatmap.append({
+                    "time_dimension": dt.strftime("%Y-%m-%dT%H:00:00Z") if dt else None,
+                    "avg_latency": float(res.avg_lat or 0)
+                })
+
+            # 3. Model Benchmarking
+            # Uses SYNTHESIS as the "dominant model" identifier per trace.
+            # Avg latency is the full trace end-to-end time (true user-perceived latency),
+            # not just the node execution time. Joined via trace_id.
+            model_query = db.query(
+                InferenceSpan.model,
+                func.count(InferenceSpan.id).label('queries'),
+                func.avg(InferenceTrace.total_latency).label('avg_lat'),
+                func.sum(InferenceTrace.total_tokens).label('tokens'),
+                func.sum(InferenceTrace.total_cost).label('cost')
+            ).join(
+                InferenceTrace, InferenceTrace.trace_id == InferenceSpan.trace_id
+            ).filter(
+                InferenceSpan.name == 'SYNTHESIS',
+                InferenceSpan.model != None,
+                InferenceSpan.model != 'N/A',
+                InferenceTrace.status == 'SUCCESS',
+                InferenceTrace.total_latency > 0,
+                InferenceTrace.timestamp >= from_date
+            ).group_by(InferenceSpan.model).all()
+
+            formatted_comparison = []
+            best_model = None
+            min_score = float('inf')
+            available_models = []
+
+            for res in model_query:
+                m_name = (res.model or "Unknown").upper()
+                available_models.append(m_name)
+
+                avg_lat = float(res.avg_lat or 0)
+                cost_per_token = (float(res.cost or 0) / int(res.tokens or 1))
+                value_score = cost_per_token * (avg_lat + 1)
+
+                formatted_comparison.append({
+                    "model": m_name,
+                    "queries": int(res.queries),
+                    "avg_latency": f"{avg_lat:.2f}s",
+                    "raw_latency": avg_lat,
+                    "total_cost": float(res.cost or 0),
+                    "sum_totalTokens": int(res.tokens or 0),
+                    "value_score": value_score
+                })
+                
+                if 0 < value_score < min_score:
+                    min_score = value_score
+                    best_model = m_name
+
+            # Calculate total input and output costs over the window
+            costs_query = db.query(
+                func.sum(InferenceSpan.input_cost).label('input_cost'),
+                func.sum(InferenceSpan.output_cost).label('output_cost')
+            ).join(
+                InferenceTrace, InferenceTrace.trace_id == InferenceSpan.trace_id
+            ).filter(InferenceTrace.timestamp >= from_date).first()
+
+            total_input_cost = float(costs_query.input_cost or 0.0) if costs_query else 0.0
+            total_output_cost = float(costs_query.output_cost or 0.0) if costs_query else 0.0
+
+            return {
+                "daily_trends": formatted_trends,
+                "heatmap_data": formatted_heatmap,
+                "comparison": sorted(formatted_comparison, key=lambda x: x['queries'], reverse=True),
+                "available_models": available_models,
+                "best_value": best_model or "N/A",
+                "total_input_cost": total_input_cost,
+                "total_output_cost": total_output_cost,
+                "cached_at": now.strftime("%H:%M:%S")
+            }
+        finally:
+            db.close()
 
 analytics_service = AnalyticsService()

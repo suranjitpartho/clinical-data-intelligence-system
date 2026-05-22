@@ -7,7 +7,8 @@ import Sidebar from './components/Sidebar';
 import MessageList from './components/Chat/MessageList';
 import ChatInput from './components/Chat/ChatInput';
 import TraceSidebar from './components/TraceSidebar';
-import AnalyticsView from './components/AnalyticsView';
+import AnalyticsView from './components/Analytics';
+
 
 const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
 
@@ -24,9 +25,13 @@ function App() {
   const [availableModels, setAvailableModels] = useState([]);
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const [traceLogs, setTraceLogs] = useState("");
-  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [analyticsData, setAnalyticsData] = useState(null);
+  const [operationalData, setOperationalData] = useState(null);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
+  const [analyticsSubView, setAnalyticsSubView] = useState('traces'); // 'traces' or 'operational'
+  const [analyticsRange, setAnalyticsRange] = useState(7);      // days: 7, 15, 30
+  const [analyticsPage, setAnalyticsPage] = useState(1);
+  const [analyticsPageSize] = useState(10);
 
   const scrollRef = useRef(null);
 
@@ -37,11 +42,23 @@ function App() {
     setCurrentView('chat');
   };
 
-  const fetchAnalytics = async () => {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
     setIsAnalyticsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/analytics`);
-      setAnalyticsData(res.data);
+      const res = await axios.get(`${API_BASE}/analytics`, {
+        params: { days, page, page_size: pageSize }
+      });
+      if (res.data && !res.data.error) {
+        setAnalyticsData(prev => {
+          const isPaginating = page > 1;
+          return {
+            ...res.data,
+            summary: (isPaginating && prev?.summary) ? prev.summary : res.data.summary
+          };
+        });
+      }
     } catch (error) {
       console.error("Analytics fetch error:", error);
     } finally {
@@ -49,11 +66,52 @@ function App() {
     }
   };
 
+  const fetchOperationalAnalytics = async (days = analyticsRange) => {
+    setIsAnalyticsLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/analytics/operational`, {
+        params: { days }
+      });
+      if (res.data) {
+        setOperationalData(res.data);
+      }
+    } catch (error) {
+      console.error("Operational analytics fetch error:", error);
+      setOperationalData({ error: error.message });
+    } finally {
+      setIsAnalyticsLoading(false);
+    }
+  };
+
+  const handleSyncAnalytics = async () => {
+    setIsSyncing(true);
+    try {
+      await axios.post(`${API_BASE}/analytics/sync`, null, {
+        params: { days: analyticsRange }
+      });
+      // After sync, immediately refresh local views from DB
+      await Promise.all([
+        fetchAnalytics(analyticsRange, 1, analyticsPageSize),
+        fetchOperationalAnalytics(analyticsRange)
+      ]);
+    } catch (error) {
+      console.error("Sync error:", error);
+      alert("Intelligence sync failed. Verify Langfuse connectivity.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Refetch when range or page changes
   useEffect(() => {
     if (currentView === 'analytics') {
-      fetchAnalytics();
+      if (analyticsSubView === 'traces') {
+        fetchAnalytics(analyticsRange, analyticsPage, analyticsPageSize);
+      } else {
+        fetchOperationalAnalytics(analyticsRange);
+      }
     }
-  }, [currentView]); // Only fetch when switching to analytics view
+  }, [currentView, analyticsRange, analyticsPage, analyticsSubView]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -193,8 +251,18 @@ function App() {
           ) : (
             <AnalyticsView
               metrics={analyticsData}
+              operationalData={operationalData}
+              subView={analyticsSubView}
+              setSubView={setAnalyticsSubView}
               isLoading={isAnalyticsLoading}
+              isSyncing={isSyncing}
+              onSync={handleSyncAnalytics}
               onBack={() => setCurrentView('chat')}
+              range={analyticsRange}
+              onRangeChange={(days) => { setAnalyticsRange(days); setAnalyticsPage(1); }}
+              currentPage={analyticsPage}
+              onPageChange={setAnalyticsPage}
+              pageSize={analyticsPageSize}
             />
           )}
         </main>

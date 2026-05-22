@@ -5,6 +5,8 @@ from app.db.base import SessionLocal
 from app.services.search import get_clinical_notes_semantic
 from app.services.agent.state import AgentState
 from app.services.schema_introspector import get_fk_relationship_map
+from app.services.query_cache import save_to_cache
+from app.services.refinement_utils import apply_data_refinement
 from app.services.prompts import (
     SQL_GENERATION_PROMPT, 
     DISCOVERY_PROMPT, 
@@ -125,6 +127,12 @@ def sql_node(state: AgentState, config, llm):
                 except Exception:
                     continue # Silently fail if ref query fails to avoid crashing main flow
 
+        # --- Write to Semantic Query Cache ---
+        try:
+            save_to_cache(query, sql)
+        except Exception as ce:
+            print(f"Failed to cache generated SQL: {ce}")
+
         session.close() 
         
         # --- Structured Tool Response ---
@@ -153,9 +161,8 @@ def sql_node(state: AgentState, config, llm):
         session.rollback()  # CRITICAL: Clean the transaction for the next nodes/logs
         session.close()
         
-        # Truncate large SQL in logs to keep the Reason Trace readable
-        sql_snippet = sql[:200] + "..." if len(sql) > 200 else sql
-        error_msg = f"\nERROR at attempt {error_count+1}: {str(e)[:150]}...\n[SQL Snippet]: {sql_snippet}"
+        # Keep trace clean—no SQL snippets, just user-friendly message
+        error_msg = f"\n• Database query failed at attempt {error_count+1}\n• Refining approach and retrying..."
         
         # Explicitly inform the state of the failure
         return {
@@ -201,5 +208,63 @@ def rag_node(state: AgentState):
 
     return {
         "medical_context": context, 
+        "logs": logs
+    }
+
+def refine_node(state: AgentState):
+    """
+    Refinement Node: Applies schema-agnostic deduplication, privacy filtering,
+    and medical context filtering. Uses the reusable refinement utility.
+    """
+    data_results = state.get("data_results", [])
+    metadata = state.get("data_metadata", {})
+    
+    if not data_results or not isinstance(data_results, list):
+        return {}
+
+    # 1. Apply core refinement logic (deduplication, ID/narrative filtering, metadata sync)
+    refined_data, refined_metadata, refinement_log = apply_data_refinement(data_results, metadata)
+    
+    # 2. Filter medical_context based on refined_data
+    medical_context = state.get("medical_context", [])
+    filtered_medical_context = []
+    context_logs = ""
+
+    if medical_context and refined_data:
+        # Extract identifiers from refined_data (names, MRN, NHI, etc.)
+        # This needs to be robust and schema-agnostic
+        identifiers = set()
+        for row in refined_data:
+            for k, v in row.items():
+                if isinstance(v, str) and len(v) > 2:  # Avoid short, generic strings
+                    k_lower = k.lower()
+                    # Common identifier patterns, adjust as needed for your schema
+                    if any(id_key in k_lower for id_key in ["name", "patient", "mrn", "nhi", "id"]):
+                        identifiers.add(v.strip().lower())
+
+        if identifiers:
+            original_context_count = len(medical_context)
+            for doc in medical_context:
+                # Check if any identifier is present in the document content
+                if any(ident in doc.lower() for ident in identifiers):
+                    filtered_medical_context.append(doc)
+            
+            if len(filtered_medical_context) < original_context_count:
+                context_logs = f"\n• Medical context refined: {len(filtered_medical_context)} relevant documents retained (from {original_context_count} raw documents)."
+            else:
+                context_logs = f"\n• Medical context validated: {len(filtered_medical_context)} documents verified."
+        else:
+            context_logs = "\n• No specific identifiers found in data_results to refine medical context."
+            filtered_medical_context = medical_context # Keep original if no identifiers to filter by
+    else:
+        filtered_medical_context = medical_context # Keep original if no medical context or refined data
+
+    # 3. Assemble final logs
+    logs = f"\n• {refinement_log}" + context_logs
+
+    return {
+        "data_results": refined_data,
+        "data_metadata": refined_metadata,
+        "medical_context": filtered_medical_context,
         "logs": logs
     }

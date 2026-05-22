@@ -3,6 +3,8 @@ from .core import Department, Staff, Patient
 from .clinical import Appointment, ClinicalNote, Prescription, LabResult, Diagnosis, ClinicalGuideline
 from .business import Billing, MedicalSupply
 from .logs import AuditLog
+from .observability import InferenceTrace, InferenceSpan
+from .cache import SemanticQueryCache
 
 # This ensures all models are registered with the Base metadata
 __all__ = [
@@ -18,5 +20,8 @@ __all__ = [
     "ClinicalGuideline",
     "Billing",
     "MedicalSupply",
-    "AuditLog"
+    "AuditLog",
+    "InferenceTrace",
+    "InferenceSpan",
+    "SemanticQueryCache"
 ]

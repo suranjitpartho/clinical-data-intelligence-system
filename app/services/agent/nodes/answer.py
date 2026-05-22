@@ -24,10 +24,12 @@ def synthesis_node(state: AgentState, config, llm):
     
     if db_error:
         meta_summary = f"DATASET AUDIT [FAILURE]: The database query failed with the following error: {db_error}. Please inform the user that a technical error occurred."
+        medical_context = ""
     else:
         meta_summary = f"DATASET AUDIT: Query returned {total} rows. Table Schema: [{cols}]."
         if metadata.get("truncated"):
             meta_summary += f" Note: displaying first 25 rows of {total} total."
+        medical_context = "\n".join(state.get("medical_context", []))[:3000]
 
     # 2. Markdown Formatting (Industry best practice for LLM data intake)
     markdown_data = format_as_markdown_table(data)
@@ -37,7 +39,7 @@ def synthesis_node(state: AgentState, config, llm):
         tool_logic=state.get("tool_query", "No specific tool logic recorded."),
         meta_summary=meta_summary,
         data=markdown_data,
-        medical_context="\n".join(state.get("medical_context", []))[:3000],
+        medical_context=medical_context,
         reference_context=json.dumps(state.get("reference_context", {}), indent=2)
     )
     answer = llm.invoke(synth_prompt, config).content.replace("<|eot_id|>", "")

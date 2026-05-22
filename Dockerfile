@@ -21,6 +21,14 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-cache the BGE-M3 embedding model directly into the image layer
+# This prevents downloading at runtime and speeds up container startup
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
+
+# Force HuggingFace to use the baked-in local cache
+ENV TRANSFORMERS_OFFLINE=1
+ENV HF_HUB_OFFLINE=1
+
 # Copy all necessary project files
 COPY app/ ./app
 COPY scripts/ ./scripts

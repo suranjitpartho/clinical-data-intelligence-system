@@ -23,9 +23,9 @@ def rewrite_node(state: AgentState, config, llm):
     if "REWRITTEN STANDALONE QUERY:" in rewritten_query.upper():
         rewritten_query = rewritten_query.split(":", 1)[-1].strip()
         
-    logs_msg = f"--- QUERY REWRITTEN: {rewritten_query} ---"
+    logs_msg = f"\n• Query Rewritten: {rewritten_query}"
     if rewritten_query.lower() == state["query"].lower():
-        logs_msg = "--- NEW TOPIC DETECTED: QUERY NOT REWRITTEN ---"
+        logs_msg = "\n• New topic detected: Query not rewritten"
         
     return {
         "query": rewritten_query, 
