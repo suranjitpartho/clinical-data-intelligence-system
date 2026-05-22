@@ -11,7 +11,7 @@ from app.services.agent.provider import get_llm
 
 # Import nodes
 from app.services.agent.nodes.query import rewrite_node, intent_node
-from app.services.agent.nodes.tools import sql_node, rag_node
+from app.services.agent.nodes.tools import sql_node, rag_node, refine_node
 from app.services.agent.nodes.answer import synthesis_node
 from app.services.agent.nodes.cache import cache_node
 
@@ -29,20 +29,18 @@ class ClinicalGraph:
 
     def route_from_classify(self, state: AgentState):
         tools = state.get("tools_needed", [])
-        routes = []
         if "sql" in tools:
-            routes.append("sql")
+            return "sql"
         if "rag" in tools:
-            routes.append("rag")
-        
-        if not routes:
-            return ["synthesis"]
-        return routes
+            return "rag"
+        return "synthesis"
 
     def route_from_sql(self, state: AgentState):
         if "ERROR" in (state.get("tool_query") or "") and state.get("error_count", 0) < 2:
             return "retry"
-        return "continue"
+        if "rag" in state.get("tools_needed", []):
+            return "rag"
+        return "refine"
 
     def _create_workflow(self):
         graph = StateGraph(AgentState)
@@ -53,6 +51,7 @@ class ClinicalGraph:
         graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
         graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
         graph.add_node("rag_tool", rag_node)
+        graph.add_node("refine", refine_node)
         graph.add_node("synthesis", lambda state, config: synthesis_node(state, config, self.llm))
         
         # Add Edges
@@ -83,11 +82,13 @@ class ClinicalGraph:
             self.route_from_sql,
             {
                 "retry": "sql_tool",
-                "continue": "synthesis"
+                "rag": "rag_tool",
+                "refine": "refine"
             }
         )
         
-        graph.add_edge("rag_tool", "synthesis")
+        graph.add_edge("rag_tool", "refine")
+        graph.add_edge("refine", "synthesis")
         graph.add_edge("synthesis", END)
         
         return graph.compile(checkpointer=self.memory)

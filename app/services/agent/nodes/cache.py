@@ -10,12 +10,12 @@ def cache_node(state: AgentState):
     try:
         # Check cache using the rewritten query
         query = state["query"]
-        cached_sql, similarity = check_semantic_cache(query, threshold=0.82)
+        cached_sql, similarity = check_semantic_cache(query, threshold=0.95)
         
         if not cached_sql:
             return {
                 "cache_hit": False,
-                "logs": "\n• Checking semantic query cache... Miss."
+                "logs": "\n• Checking semantic query cache... Not Matched."
             }
             
         # Cache hit! Execute SQL directly to retrieve live results
@@ -47,7 +47,7 @@ def cache_node(state: AgentState):
         }
         
         log_msg = (
-            f"\n• Checking semantic query cache... **Hit** (Similarity: {similarity:.2%})!"
+            f"\n• Checking semantic query cache... Matched ({similarity:.2%})"
             f"\n• Reusing cached SQL query to bypass generation step."
         )
         

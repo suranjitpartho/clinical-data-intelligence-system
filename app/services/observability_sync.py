@@ -174,7 +174,7 @@ class ObservabilitySyncService:
         trace_record.output_preview = self._clean_clinical_data(raw_output)
         
         # 2. First Pass: Prepare the 6 Core Clinical Spans
-        WHITELIST = ['rewrite', 'cache_check', 'classify', 'sql_tool', 'rag_tool', 'synthesis']
+        WHITELIST = ['rewrite', 'cache_check', 'classify', 'sql_tool', 'rag_tool', 'refine', 'synthesis']
         observations = t_full.observations if hasattr(t_full, 'observations') else []
         span_data = {name: {"ids": [], "tokens": 0, "in": 0, "out": 0, "cost": 0.0, "in_cost": 0.0, "out_cost": 0.0, "latency": 0.0, "start_time": None, "status": "SUCCESS", "error": None, "input": "", "output": "", "model": "N/A"} for name in WHITELIST}
 

@@ -5,7 +5,7 @@ from app.services.search import model as embedding_model
 
 # Checks if a query matches a previously cached query.
 # Returns (cached_sql, similarity) if a match is found above the threshold, else (None, None).
-def check_semantic_cache(query_text: str, threshold: float = 0.82):
+def check_semantic_cache(query_text: str, threshold: float = 0.95):
     db = SessionLocal()
     try:
         # 1. Embed query_text

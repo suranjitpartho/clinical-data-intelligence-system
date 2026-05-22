@@ -26,6 +26,7 @@ import io
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy import text
 from app.db.base import SessionLocal, engine, Base
+from app.services.refinement_utils import apply_data_refinement
 class QueryRequest(BaseModel):
     query: str
     model: str = None
@@ -89,7 +90,9 @@ async def process_query(request: QueryRequest):
 @app.post("/export-csv")
 async def export_csv(request: ExportRequest):
     """
-    Scalable CSV export that streams results from the database.
+    Scalable CSV export that streams refined results from the database.
+    Applies the same refinement logic (deduplication, privacy filtering) 
+    as the agent workflow to ensure consistency between UI and export.
     Prevents memory overflow even with millions of rows.
     """
     if not request.sql or not request.sql.strip().upper().startswith(("SELECT", "WITH")):
@@ -98,30 +101,46 @@ async def export_csv(request: ExportRequest):
     def generate_csv():
         db = SessionLocal()
         try:
-            # We execute the query and fetch in a way that doesn't load everything into RAM
-            # result.yield_per(1000) could be used if it was a query object, 
-            # for raw text we iterate the cursor.
+            # Execute the raw query to get ALL results
             result = db.execute(text(request.sql))
+            
+            # Convert all rows to dictionaries for refinement
+            raw_data = [dict(row._mapping) for row in result]
+            
+            # Apply the same refinement logic as the agent uses
+            refined_data, refined_metadata, refinement_log = apply_data_refinement(
+                raw_data,
+                {"total_count": len(raw_data)}
+            )
+            
+            # If no refined data, return empty CSV with headers
+            if not refined_data:
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(["No results after refinement"])
+                yield output.getvalue()
+                return
+            
+            # Extract column headers from refined data
+            keys = list(refined_data[0].keys())
             
             output = io.StringIO()
             writer = csv.writer(output)
             
             # Write Header
-            keys = result.keys()
             writer.writerow(keys)
             yield output.getvalue()
             output.seek(0)
             output.truncate(0)
             
-            # Write Rows in chunks
-            for row in result:
-                writer.writerow(row)
+            # Write Refined Rows in chunks
+            for row in refined_data:
+                writer.writerow([row.get(k, "") for k in keys])
                 yield output.getvalue()
                 output.seek(0)
                 output.truncate(0)
+                
         except Exception as e:
-            # In a stream, we can't easily change status code once started, 
-            # but we can yield the error in the CSV for debugging or log it.
             print(f"Export Error: {e}")
         finally:
             db.close()
