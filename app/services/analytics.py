@@ -66,6 +66,7 @@ class AnalyticsService:
                     "total_cost": float(t.total_cost or 0),
                     "status": t.status,
                     "error_message": t.error_message,
+                    "sql_query": t.sql_query,
                     "steps": [
                         {
                             "name": s.name,

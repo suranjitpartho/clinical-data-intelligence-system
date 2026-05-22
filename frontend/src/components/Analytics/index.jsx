@@ -4,6 +4,7 @@ import StatCard from './StatCard';
 import TraceItem from './TraceItem';
 import Pagination from './Pagination';
 import OperationalView from './OperationalView';
+import SqlSidebar from '../SqlSidebar';
 
 const RANGE_OPTIONS = [
   { label: '7D', value: 7 },
@@ -27,6 +28,18 @@ const AnalyticsView = ({
   pageSize 
 }) => {
   const [expandedTrace, setExpandedTrace] = useState(null);
+  const [isSqlOpen, setIsSqlOpen] = useState(false);
+  const [selectedSql, setSelectedSql] = useState(null);
+
+  const handleSqlView = (sql) => {
+    if (isSqlOpen && selectedSql === sql) {
+      setIsSqlOpen(false);
+      setSelectedSql(null);
+    } else {
+      setSelectedSql(sql);
+      setIsSqlOpen(true);
+    }
+  };
 
   const summary = metrics?.summary || { total_queries: 0, error_queries: 0, avg_latency: '0s', total_tokens: '0', total_cost: '$0.00' };
   const traces = metrics?.recent_traces || [];
@@ -51,7 +64,8 @@ const AnalyticsView = ({
   });
 
   return (
-    <div className="flex-1 bg-dark-bg overflow-y-auto font-sans custom-scrollbar relative">
+    <div className="flex bg-dark-bg font-sans custom-scrollbar relative h-full">
+      <div className="flex-1 overflow-y-auto">
       <div className="max-w-5xl mx-auto p-6 pb-12">
 
         {/* Header Section: Static 2-Row Layout to prevent flickering */}
@@ -203,6 +217,9 @@ const AnalyticsView = ({
                         trace={trace} 
                         isExpanded={expandedTrace === trace.id}
                         onToggleExpand={setExpandedTrace}
+                        onSqlView={handleSqlView}
+                        isSqlOpen={isSqlOpen}
+                        selectedSql={selectedSql}
                       />
                     );
                   }
@@ -226,19 +243,23 @@ const AnalyticsView = ({
                             trace={trace} 
                             isExpanded={expandedTrace === trace.id}
                             onToggleExpand={setExpandedTrace}
+                            onSqlView={handleSqlView}
+                            isSqlOpen={isSqlOpen}
+                            selectedSql={selectedSql}
                           />
                         ))}
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                })
+              }
 
               <Pagination 
                 pagination={pagination}
                 currentPage={currentPage}
                 onPageChange={onPageChange}
               />
+            </div>
             </div>
           </>
         ) : (
@@ -249,6 +270,13 @@ const AnalyticsView = ({
           />
         )}
       </div>
+      </div>
+
+      <SqlSidebar
+        isOpen={isSqlOpen}
+        setIsOpen={setIsSqlOpen}
+        sql={selectedSql}
+      />
     </div>
   );
 };

@@ -1,6 +1,8 @@
+import ast
 import datetime
 import os
 import json
+import re
 import time
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -264,5 +266,32 @@ class ObservabilitySyncService:
             if sd["status"] == "ERROR":
                 trace_record.status = "ERROR"
                 trace_record.error_message = sd["error"]
+
+        # 5. Extract the exact SQL query from sql_tool span output
+        # The span's output is the sql_node return dict containing tool_query
+        sql_tool_output = span_data.get("sql_tool", {}).get("output", "")
+        if sql_tool_output:
+            tool_query = None
+            # Try parsing the Python repr dict
+            try:
+                # Handle non-standard repr values like '<Decimal>'
+                cleaned = re.sub(r"'<[A-Za-z_]+>'", "0", sql_tool_output)
+                data = ast.literal_eval(cleaned)
+                if isinstance(data, dict):
+                    tool_query = data.get('tool_query')
+            except (ValueError, SyntaxError):
+                pass
+            
+            if not tool_query:
+                # Fallback: extract tool_query value between double-quotes
+                match = re.search(
+                    r"'tool_query':\s*\"(.+?)\"(?=\s*,\s*'(?:logs|reference_context))",
+                    sql_tool_output, re.DOTALL
+                )
+                if match:
+                    tool_query = match.group(1)
+            
+            if tool_query and not str(tool_query).startswith('ERROR'):
+                trace_record.sql_query = str(tool_query).strip()
 
 obs_sync_service = ObservabilitySyncService()
