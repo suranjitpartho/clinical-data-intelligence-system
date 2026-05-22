@@ -2,7 +2,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.services.agent.state import AgentState
 from app.services.prompts import FOLLOW_UP_REWRITE_PROMPT, INTENT_CLASSIFY_PROMPT
 
-def rewrite_node(state: AgentState, config, llm):
+async def rewrite_node(state: AgentState, config, llm):
     # Extract text from LangChain message objects
     msg_history = []
     for m in state.get("messages", [])[:-1]: # Exclude the current query which was just added
@@ -17,7 +17,8 @@ def rewrite_node(state: AgentState, config, llm):
         history="\n".join(history),
         query=state["query"]
     )
-    rewritten_query = llm.invoke(prompt, config).content.strip()
+    response = await llm.ainvoke(prompt, config)
+    rewritten_query = response.content.strip()
     
     # Clean prefix if LLM hallucinates it
     if "REWRITTEN STANDALONE QUERY:" in rewritten_query.upper():
@@ -32,9 +33,9 @@ def rewrite_node(state: AgentState, config, llm):
         "logs": logs_msg
     }
 
-def intent_node(state: AgentState, config, llm):
+async def intent_node(state: AgentState, config, llm):
     prompt = INTENT_CLASSIFY_PROMPT.format(query=state["query"])
-    response = llm.invoke(prompt, config).content.strip().upper()
+    response = (await llm.ainvoke(prompt, config)).content.strip().upper()
     
     # Parse potential multiple tools (e.g., "SQL,RAG")
     tools = [t.strip().lower() for t in response.split(",")]

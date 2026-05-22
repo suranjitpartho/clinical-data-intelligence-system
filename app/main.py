@@ -76,7 +76,7 @@ async def sync_analytics(background_tasks: BackgroundTasks, days: int = 30):
 async def process_query(request: QueryRequest):
     try:
         # Pass to our dynamic Clinical Agent
-        result = clinical_agent.invoke({
+        result = await clinical_agent.invoke({
             "query": request.query,
             "model": request.model,
             "provider": request.provider,

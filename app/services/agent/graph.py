@@ -1,6 +1,7 @@
+import inspect
 from typing import List, Dict
 from functools import partial
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.db.base import SessionLocal
@@ -14,6 +15,19 @@ from app.services.agent.nodes.query import rewrite_node, intent_node
 from app.services.agent.nodes.tools import sql_node, rag_node, refine_node
 from app.services.agent.nodes.answer import synthesis_node
 from app.services.agent.nodes.cache import cache_node
+
+
+def _bind_llm(fn, llm):
+    """Wrap a node function with the LLM, preserving sync/async signature."""
+    if inspect.iscoroutinefunction(fn):
+        async def wrapper(state, config):
+            return await fn(state, config, llm)
+    else:
+        def wrapper(state, config):
+            return fn(state, config, llm)
+    wrapper.__name__ = fn.__name__
+    return wrapper
+
 
 class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
@@ -46,16 +60,16 @@ class ClinicalGraph:
         graph = StateGraph(AgentState)
         
         # Add Nodes with explicit names for tracking
-        graph.add_node("rewrite", lambda state, config: rewrite_node(state, config, self.llm))
+        graph.add_node("rewrite", _bind_llm(rewrite_node, self.llm))
         graph.add_node("cache_check", cache_node)
-        graph.add_node("classify", lambda state, config: intent_node(state, config, self.llm))
-        graph.add_node("sql_tool", lambda state, config: sql_node(state, config, self.llm))
+        graph.add_node("classify", _bind_llm(intent_node, self.llm))
+        graph.add_node("sql_tool", _bind_llm(sql_node, self.llm))
         graph.add_node("rag_tool", rag_node)
         graph.add_node("refine", refine_node)
-        graph.add_node("synthesis", lambda state, config: synthesis_node(state, config, self.llm))
+        graph.add_node("synthesis", _bind_llm(synthesis_node, self.llm))
         
         # Add Edges
-        graph.set_entry_point("rewrite")
+        graph.add_edge(START, "rewrite")
         graph.add_edge("rewrite", "cache_check")
         
         graph.add_conditional_edges(
@@ -93,7 +107,7 @@ class ClinicalGraph:
         
         return graph.compile(checkpointer=self.memory)
 
-    def run_query(self, query: str, thread_id: str = "default", history: List[Dict] = None):
+    async def arun_query(self, query: str, thread_id: str = "default", history: List[Dict] = None):
         db = SessionLocal()
         try:
             # Initialize Langfuse Callback if keys are available
@@ -141,7 +155,7 @@ class ClinicalGraph:
                 "cache_hit": None
             }
             
-            final_output = self.workflow.invoke(initial_state, config=config)
+            final_output = await self.workflow.ainvoke(initial_state, config=config)
             
             # Determine success/failure status dynamically
             tool_query = final_output.get("tool_query")

@@ -13,7 +13,7 @@ def format_as_markdown_table(data):
         rows.append("| " + " | ".join(str(row.get(c, '')) for c in columns) + " |")
     return f"{header}\n{separator}\n" + "\n".join(rows)
 
-def synthesis_node(state: AgentState, config, llm):
+async def synthesis_node(state: AgentState, config, llm):
     metadata = state.get("data_metadata", {})
     data = state.get("data_results", [])
     
@@ -42,7 +42,8 @@ def synthesis_node(state: AgentState, config, llm):
         medical_context=medical_context,
         reference_context=json.dumps(state.get("reference_context", {}), indent=2)
     )
-    answer = llm.invoke(synth_prompt, config).content.replace("<|eot_id|>", "")
+    response = await llm.ainvoke(synth_prompt, config)
+    answer = response.content.replace("<|eot_id|>", "")
     return {
         "final_answer": answer,
         "messages": [AIMessage(content=answer)]
