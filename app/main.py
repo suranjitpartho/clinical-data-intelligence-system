@@ -2,6 +2,8 @@ import os
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 import json
+import asyncio
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -11,7 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load environment variables
 load_dotenv()
 
-app = FastAPI(title="CDIS AI API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.services.agent.checkpointer import get_checkpointer, close_checkpointer
+    get_checkpointer()
+    yield
+    close_checkpointer()
+
+
+app = FastAPI(title="CDIS AI API", lifespan=lifespan)
 
 # Enable CORS
 app.add_middleware(
@@ -71,6 +82,66 @@ async def sync_analytics(background_tasks: BackgroundTasks, days: int = 30):
     # sync a full 30-day window for data integrity.
     background_tasks.add_task(obs_sync_service.sync_latest, days_back=30)
     return {"status": "accepted", "message": "Synchronization started in background"}
+
+@app.get("/threads")
+async def list_threads():
+    from app.services.agent.checkpointer import get_checkpointer
+    get_checkpointer()  # Ensure checkpoint tables exist
+    db = SessionLocal()
+    try:
+        rows = db.execute(text("""
+            SELECT DISTINCT ON (thread_id)
+                thread_id,
+                metadata
+            FROM checkpoints
+            ORDER BY thread_id, checkpoint_id DESC
+        """)).fetchall()
+        result = []
+        for row in rows:
+            meta = row.metadata or {}
+            result.append({
+                "thread_id": row.thread_id,
+                "title": meta.get("thread_title", "Untitled"),
+                "created_at": meta.get("created_at"),
+            })
+        return sorted(result, key=lambda t: t["created_at"] or "", reverse=True)
+    except Exception as e:
+        print(f"Error listing threads: {e}")
+        return []
+    finally:
+        db.close()
+
+
+@app.get("/threads/{thread_id}")
+async def get_thread(thread_id: str):
+    from app.services.agent.checkpointer import get_checkpointer
+    checkpointer = get_checkpointer()
+    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    loop = asyncio.get_event_loop()
+    checkpoint_tuple = await loop.run_in_executor(None, checkpointer.get_tuple, config)
+    if not checkpoint_tuple:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    messages = []
+    for msg in checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", []):
+        role = "user" if getattr(msg, "type", "") == "human" else "assistant"
+        entry = {"role": role, "content": str(msg.content)}
+        if role == "assistant":
+            akw = getattr(msg, "additional_kwargs", {}) or {}
+            if akw.get("data_results"):
+                entry["data_results"] = akw["data_results"]
+            if akw.get("tool_query"):
+                entry["tool_query"] = akw["tool_query"]
+            if akw.get("next_step"):
+                entry["next_step"] = akw["next_step"]
+        messages.append(entry)
+    meta = checkpoint_tuple.metadata or {}
+    return {
+        "thread_id": thread_id,
+        "messages": messages,
+        "title": meta.get("thread_title", "Untitled"),
+        "created_at": meta.get("created_at"),
+    }
+
 
 @app.post("/query")
 async def process_query(request: QueryRequest):

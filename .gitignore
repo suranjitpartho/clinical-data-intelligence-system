@@ -22,6 +22,7 @@ Thumbs.db
 
 # Agent Configuration
 .agents
+opencode.json
 
 # Logs
 app.log

@@ -46,5 +46,12 @@ async def synthesis_node(state: AgentState, config, llm):
     answer = response.content.replace("<|eot_id|>", "")
     return {
         "final_answer": answer,
-        "messages": [AIMessage(content=answer)]
+        "messages": [AIMessage(
+            content=answer,
+            additional_kwargs={
+                "data_results": state.get("data_results", []),
+                "tool_query": state.get("tool_query", ""),
+                "next_step": ", ".join(state.get("tools_needed", [])),
+            }
+        )]
     }

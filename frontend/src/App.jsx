@@ -16,7 +16,8 @@ function App() {
   const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'
   const [messages, setMessages] = useState([]);
   const [history, setHistory] = useState([]);
-  const [threadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
+  const [threadId, setThreadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
+  const [threads, setThreads] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState("Loading...");
@@ -35,11 +36,41 @@ function App() {
 
   const scrollRef = useRef(null);
 
+  const fetchThreads = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/threads`);
+      setThreads(res.data || []);
+    } catch (error) {
+      console.error("Failed to fetch threads:", error);
+    }
+  };
+
+  const selectThread = async (tid) => {
+    setThreadId(tid);
+    setCurrentView('chat');
+    setIsTraceOpen(false);
+    try {
+      const res = await axios.get(`${API_BASE}/threads/${tid}`);
+      const msgs = (res.data.messages || []).map(m => ({
+        role: m.role,
+        content: m.content,
+        data: m.data_results || null,
+        tool_query: m.tool_query || null,
+        nextStep: m.next_step || null,
+      }));
+      setMessages(msgs);
+      setHistory(res.data.messages || []);
+    } catch (error) {
+      console.error("Failed to load thread:", error);
+    }
+  };
+
   const createNewChat = () => {
     setMessages([]);
     setHistory([]);
     setIsTraceOpen(false);
     setCurrentView('chat');
+    setThreadId(`session_${Math.random().toString(36).slice(2, 11)}`);
   };
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -137,6 +168,7 @@ function App() {
       }
     };
     fetchConfig();
+    fetchThreads();
   }, []);
 
   const handleSend = async (e) => {
@@ -174,6 +206,7 @@ function App() {
         setHistory(response.data.history);
       }
       await fetchAnalytics();
+      await fetchThreads();
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'ai',
@@ -223,6 +256,9 @@ function App() {
           currentView={currentView}
           setCurrentView={setCurrentView}
           onNewChat={createNewChat}
+          threads={threads}
+          activeThreadId={threadId}
+          onSelectThread={selectThread}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden relative bg-black/10">

@@ -1,12 +1,13 @@
 import inspect
+import datetime
 from typing import List, Dict
-from functools import partial
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from app.services.agent.checkpointer import get_checkpointer
 
+from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.models.logs import AuditLog
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from app.services.agent.state import AgentState
 from app.services.agent.provider import get_llm
 
@@ -33,7 +34,7 @@ class ClinicalGraph:
     def __init__(self, provider=None, model_name=None):
         self.model_name = model_name or "default-model"
         self.llm = get_llm(provider, model_name)
-        self.memory = MemorySaver()
+        self.memory = get_checkpointer()
         self.workflow = self._create_workflow()
 
     def route_from_cache(self, state: AgentState):
@@ -132,30 +133,60 @@ class ClinicalGraph:
                     "langfuse_tags": ["clinical-intelligence", self.model_name]
                 }
             }
-            # Convert incoming history (dicts) to LangChain Message objects
-            message_history = []
-            if history:
-                for m in history:
-                    if m["role"] == "user":
-                        message_history.append(HumanMessage(content=m["content"]))
-                    elif m["role"] == "assistant":
-                        message_history.append(AIMessage(content=m["content"]))
 
-            initial_state = {
-                "query": query,
-                "messages": message_history + [HumanMessage(content=query)],
-                "tools_needed": [],
-                "tool_query": None,
-                "data_results": [],
-                "data_metadata": {},
-                "medical_context": [],
-                "final_answer": None,
-                "error_count": 0,
-                "logs": "",
-                "cache_hit": None
-            }
+            # Check if thread already has checkpoints (existing conversation)
+            existing = db.execute(
+                text("SELECT 1 FROM checkpoints WHERE thread_id = :tid LIMIT 1"),
+                {"tid": thread_id}
+            ).fetchone()
+
+            if existing:
+                # Resume existing thread — preserve thread_title and created_at
+                # from the latest checkpoint metadata
+                existing_meta = db.execute(
+                    text("SELECT metadata FROM checkpoints WHERE thread_id = :tid ORDER BY checkpoint_id DESC LIMIT 1"),
+                    {"tid": thread_id}
+                ).scalar()
+                if existing_meta:
+                    config["metadata"]["thread_title"] = existing_meta.get("thread_title", "Untitled")
+                    config["metadata"]["created_at"] = existing_meta.get("created_at")
+
+                input_state = {
+                    "query": query,
+                    "messages": [HumanMessage(content=query)],
+                }
+            else:
+                # New thread — store title + timestamp in metadata for sidebar
+                config["metadata"]["thread_title"] = (
+                    history[0]["content"][:80] if history else query[:80]
+                )
+                config["metadata"]["created_at"] = datetime.datetime.now(
+                    datetime.timezone.utc
+                ).isoformat()
+
+                message_history = []
+                if history:
+                    for m in history:
+                        if m["role"] == "user":
+                            message_history.append(HumanMessage(content=m["content"]))
+                        elif m["role"] == "assistant":
+                            message_history.append(AIMessage(content=m["content"]))
+
+                input_state = {
+                    "query": query,
+                    "messages": message_history + [HumanMessage(content=query)],
+                    "tools_needed": [],
+                    "tool_query": None,
+                    "data_results": [],
+                    "data_metadata": {},
+                    "medical_context": [],
+                    "final_answer": None,
+                    "error_count": 0,
+                    "logs": "",
+                    "cache_hit": None
+                }
             
-            final_output = await self.workflow.ainvoke(initial_state, config=config)
+            final_output = await self.workflow.ainvoke(input_state, config=config)
             
             # Determine success/failure status dynamically
             tool_query = final_output.get("tool_query")
@@ -210,7 +241,10 @@ class ClinicalGraph:
                 "is_error": False
             }
         except Exception as e:
+            import traceback
             error_msg = str(e)
+            print(f"arun_query error [{type(e).__name__}]: {error_msg}")
+            traceback.print_exc()
             # Handle Rate Limits (Groq/OpenAI/Anthropic)
             if "429" in error_msg or "rate limit" in error_msg.lower():
                 friendly_msg = (
@@ -224,6 +258,6 @@ class ClinicalGraph:
                     "is_error": True
                 }
             
-            return {"final_answer": f"Graph Error: {error_msg}", "data_results": [], "is_error": True}
+            return {"final_answer": f"Graph Error ({type(e).__name__}): {error_msg}", "data_results": [], "is_error": True}
         finally:
             db.close()
