@@ -3,7 +3,9 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 import json
 import asyncio
+import datetime
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -84,18 +86,28 @@ async def sync_analytics(background_tasks: BackgroundTasks, days: int = 30):
     return {"status": "accepted", "message": "Synchronization started in background"}
 
 @app.get("/threads")
-async def list_threads():
+async def list_threads(page: int = 1, page_size: int = 25):
     from app.services.agent.checkpointer import get_checkpointer
     get_checkpointer()  # Ensure checkpoint tables exist
     db = SessionLocal()
     try:
+        total = db.execute(text("""
+            SELECT COUNT(*) FROM (
+                SELECT DISTINCT ON (thread_id) 1 FROM checkpoints
+            ) sub
+        """)).scalar() or 0
+
+        offset = (page - 1) * page_size
         rows = db.execute(text("""
-            SELECT DISTINCT ON (thread_id)
-                thread_id,
-                metadata
-            FROM checkpoints
-            ORDER BY thread_id, checkpoint_id DESC
-        """)).fetchall()
+            SELECT thread_id, metadata FROM (
+                SELECT DISTINCT ON (thread_id) thread_id, metadata
+                FROM checkpoints
+                ORDER BY thread_id, checkpoint_id DESC
+            ) sub
+            ORDER BY (sub.metadata->>'created_at') DESC NULLS LAST
+            LIMIT :limit OFFSET :offset
+        """), {"limit": page_size, "offset": offset}).fetchall()
+
         result = []
         for row in rows:
             meta = row.metadata or {}
@@ -104,10 +116,17 @@ async def list_threads():
                 "title": meta.get("thread_title", "Untitled"),
                 "created_at": meta.get("created_at"),
             })
-        return sorted(result, key=lambda t: t["created_at"] or "", reverse=True)
+
+        return {
+            "threads": result,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": offset + page_size < total,
+        }
     except Exception as e:
         print(f"Error listing threads: {e}")
-        return []
+        return {"threads": [], "total": 0, "page": 1, "page_size": page_size, "has_more": False}
     finally:
         db.close()
 
@@ -143,6 +162,20 @@ async def get_thread(thread_id: str):
     }
 
 
+class _SafeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+async def _format_sse(events):
+    async for event in events:
+        event_type = event.pop("type", "")
+        data = json.dumps(event, cls=_SafeEncoder)
+        yield f"event: {event_type}\ndata: {data}\n\n"
+
 @app.post("/query")
 async def process_query(request: QueryRequest):
     try:
@@ -157,6 +190,25 @@ async def process_query(request: QueryRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/query/stream")
+async def process_query_stream(request: QueryRequest):
+    events = clinical_agent.invoke_stream({
+        "query": request.query,
+        "model": request.model,
+        "provider": request.provider,
+        "thread_id": request.thread_id,
+        "history": request.history
+    })
+    return StreamingResponse(
+        _format_sse(events),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 @app.post("/export-csv")
 async def export_csv(request: ExportRequest):

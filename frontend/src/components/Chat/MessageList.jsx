@@ -2,7 +2,17 @@ import { Database, Search, Brain, AlertCircle, Download } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
 
-const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport }) => {
+const NODE_LABELS = {
+  rewrite: "Analyzing query...",
+  cache_check: "Checking cache...",
+  classify: "Classifying intent...",
+  sql_tool: "Querying database...",
+  rag_tool: "Searching documents...",
+  refine: "Refining results...",
+  synthesis: "Generating response...",
+};
+
+const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport }) => {
   return (
     <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
       <div className="max-w-3xl mx-auto w-full p-4 space-y-5 pb-6">
@@ -108,7 +118,7 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
       ))}
 
 
-      {isLoading && (
+      {isLoading && !streamingContent && (
         <div className="flex justify-start animate-fade-in pl-2">
           <div className="flex gap-4 items-center text-clinical-blue/60 italic text-[13px] font-medium">
             <div className="flex gap-1.5">
@@ -116,7 +126,25 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
               <span className="w-1.5 h-1.5 bg-clinical-blue rounded-full animate-bounce [animation-duration:1s] [animation-delay:0.2s]"></span>
               <span className="w-1.5 h-1.5 bg-clinical-blue rounded-full animate-bounce [animation-duration:1s] [animation-delay:0.4s]"></span>
             </div>
-            Clinical Engine analyzing medical database...
+            {NODE_LABELS[currentNode] || "Clinical Engine analyzing medical database..."}
+          </div>
+        </div>
+      )}
+
+      {streamingContent && (
+        <div className="flex justify-start animate-fade-in-up">
+          <div className="max-w-[85%] space-y-4">
+            <div className="py-2">
+              {currentNode && currentNode !== "synthesis" && (
+                <div className="text-[11px] text-clinical-blue/50 font-medium mb-1.5 tracking-wide">
+                  {NODE_LABELS[currentNode]}
+                </div>
+              )}
+              <div className="max-w-none">
+                {renderMarkdown(streamingContent)}
+                <span className="inline-block w-[2px] h-[1em] bg-clinical-blue ml-0.5 animate-blink-cursor align-middle"></span>
+              </div>
+            </div>
           </div>
         </div>
       )}

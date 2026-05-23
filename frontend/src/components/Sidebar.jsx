@@ -13,6 +13,8 @@ const Sidebar = ({
   setCurrentView,
   onNewChat,
   threads,
+  hasMore,
+  onLoadMore,
   activeThreadId,
   onSelectThread
 }) => {
@@ -101,6 +103,14 @@ const Sidebar = ({
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <button
+                  onClick={onLoadMore}
+                  className="w-full text-center py-2.5 text-[11px] font-bold text-gray-500 hover:text-clinical-blue transition-colors cursor-pointer"
+                >
+                  Load more
+                </button>
+              )}
             </div>
           </div>
         )}

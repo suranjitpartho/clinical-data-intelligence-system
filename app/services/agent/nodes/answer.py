@@ -42,8 +42,11 @@ async def synthesis_node(state: AgentState, config, llm):
         medical_context=medical_context,
         reference_context=json.dumps(state.get("reference_context", {}), indent=2)
     )
-    response = await llm.ainvoke(synth_prompt, config)
-    answer = response.content.replace("<|eot_id|>", "")
+    chunks = []
+    async for chunk in llm.astream(synth_prompt, config):
+        chunks.append(chunk)
+    full = "".join(c.content for c in chunks)
+    answer = full.replace("<|eot_id|>", "")
     return {
         "final_answer": answer,
         "messages": [AIMessage(

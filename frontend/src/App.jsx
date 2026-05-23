@@ -34,15 +34,34 @@ function App() {
   const [analyticsPage, setAnalyticsPage] = useState(1);
   const [analyticsPageSize] = useState(10);
 
+  const [streamingContent, setStreamingContent] = useState("");
+  const [currentNode, setCurrentNode] = useState("");
+  const [threadsHasMore, setThreadsHasMore] = useState(false);
+  const streamingRef = useRef("");
+  const threadsPageRef = useRef(1);
+
   const scrollRef = useRef(null);
 
-  const fetchThreads = async () => {
+  const fetchThreads = async (page = 1) => {
     try {
-      const res = await axios.get(`${API_BASE}/threads`);
-      setThreads(res.data || []);
+      const res = await axios.get(`${API_BASE}/threads`, {
+        params: { page, page_size: 25 }
+      });
+      const data = res.data || {};
+      if (page === 1) {
+        setThreads(data.threads || []);
+      } else {
+        setThreads(prev => [...prev, ...(data.threads || [])]);
+      }
+      setThreadsHasMore(data.has_more || false);
+      threadsPageRef.current = page;
     } catch (error) {
       console.error("Failed to fetch threads:", error);
     }
+  };
+
+  const loadMoreThreads = () => {
+    fetchThreads(threadsPageRef.current + 1);
   };
 
   const selectThread = async (tid) => {
@@ -148,7 +167,7 @@ function App() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, streamingContent]);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -181,40 +200,97 @@ function App() {
     const originalInput = input;
     setInput("");
     setIsLoading(true);
+    streamingRef.current = "";
+    setStreamingContent("");
+    setCurrentNode("");
 
     try {
-      const response = await axios.post(`${API_BASE}/query`, {
-        query: originalInput,
-        model: selectedModel,
-        provider: selectedProvider,
-        thread_id: threadId,
-        history: history
+      const response = await fetch(`${API_BASE}/query/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: originalInput,
+          model: selectedModel,
+          provider: selectedProvider,
+          thread_id: threadId,
+          history: history
+        })
       });
 
-      const aiResponse = {
-        role: 'ai',
-        content: response.data.final_answer,
-        data: response.data.data_results,
-        nextStep: response.data.next_step,
-        tool_query: response.data.tool_query,
-        logs: response.data.logs,
-        isError: response.data.is_error
-      };
-
-      setMessages(prev => [...prev, aiResponse]);
-      if (response.data.history) {
-        setHistory(response.data.history);
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
       }
-      await fetchAnalytics();
-      await fetchThreads();
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split("\n");
+          let event = "";
+          let dataRaw = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataRaw = line.slice(6);
+          }
+
+          if (!dataRaw) continue;
+          const data = JSON.parse(dataRaw);
+
+          if (event === "node_start") {
+            setCurrentNode(data.node);
+          } else if (event === "token") {
+            streamingRef.current += data.content;
+            setStreamingContent(streamingRef.current);
+          } else if (event === "done") {
+            const aiResponse = {
+              role: "ai",
+              content: streamingRef.current,
+              data: data.data_results,
+              nextStep: data.next_step,
+              tool_query: data.tool_query,
+              logs: data.logs,
+              isError: false
+            };
+            setMessages(prev => [...prev, aiResponse]);
+            if (data.history) setHistory(data.history);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            fetchThreads();
+          } else if (event === "error") {
+            setMessages(prev => [...prev, {
+              role: "ai",
+              content: data.message || "An error occurred.",
+              isError: true
+            }]);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+          }
+        }
+      }
     } catch (error) {
+      console.error("Stream error:", error);
       setMessages(prev => [...prev, {
-        role: 'ai',
+        role: "ai",
         content: "Error: Could not connect to the Clinical Intelligence backend.",
         isError: true
       }]);
     } finally {
       setIsLoading(false);
+      setCurrentNode("");
     }
   };
 
@@ -257,6 +333,8 @@ function App() {
           setCurrentView={setCurrentView}
           onNewChat={createNewChat}
           threads={threads}
+          hasMore={threadsHasMore}
+          onLoadMore={loadMoreThreads}
           activeThreadId={threadId}
           onSelectThread={selectThread}
         />
@@ -269,6 +347,8 @@ function App() {
               <MessageList
                 messages={messages}
                 isLoading={isLoading}
+                streamingContent={streamingContent}
+                currentNode={currentNode}
                 scrollRef={scrollRef}
                 isTraceOpen={isTraceOpen}
                 setIsTraceOpen={setIsTraceOpen}
