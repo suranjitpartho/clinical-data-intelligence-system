@@ -1,27 +1,29 @@
 import json
 from langchain_core.messages import AIMessage
-from app.services.agent.state import AgentState
-from app.services.prompts import SYNTHESIS_PROMPT
+from app.agent.state import AgentState
+from app.agent.prompts import SYNTHESIS_PROMPT
+
 
 def format_as_markdown_table(data):
-    if not data: return "No data available."
+    if not data:
+        return "No data available."
     columns = data[0].keys()
     header = "| " + " | ".join(columns) + " |"
     separator = "| " + " | ".join(["---"] * len(columns)) + " |"
     rows = []
     for row in data:
-        rows.append("| " + " | ".join(str(row.get(c, '')) for c in columns) + " |")
+        rows.append("| " + " | ".join(str(row.get(c, "")) for c in columns) + " |")
     return f"{header}\n{separator}\n" + "\n".join(rows)
+
 
 async def synthesis_node(state: AgentState, config, llm):
     metadata = state.get("data_metadata", {})
     data = state.get("data_results", [])
-    
-    # 1. Standardized Meta-Summary from the Source Tool
+
     total = metadata.get("total_count", 0)
     cols = ", ".join(metadata.get("columns", []))
     db_error = metadata.get("error")
-    
+
     if db_error:
         meta_summary = f"DATASET AUDIT [FAILURE]: The database query failed with the following error: {db_error}. Please inform the user that a technical error occurred."
         medical_context = ""
@@ -31,16 +33,15 @@ async def synthesis_node(state: AgentState, config, llm):
             meta_summary += f" Note: displaying first 25 rows of {total} total."
         medical_context = "\n".join(state.get("medical_context", []))[:3000]
 
-    # 2. Markdown Formatting (Industry best practice for LLM data intake)
     markdown_data = format_as_markdown_table(data)
-    
+
     synth_prompt = SYNTHESIS_PROMPT.format(
-        query=state["query"], 
+        query=state["query"],
         tool_logic=state.get("tool_query", "No specific tool logic recorded."),
         meta_summary=meta_summary,
         data=markdown_data,
         medical_context=medical_context,
-        reference_context=json.dumps(state.get("reference_context", {}), indent=2)
+        reference_context=json.dumps(state.get("reference_context", {}), indent=2),
     )
     chunks = []
     async for chunk in llm.astream(synth_prompt, config):
@@ -49,12 +50,14 @@ async def synthesis_node(state: AgentState, config, llm):
     answer = full.replace("<|eot_id|>", "")
     return {
         "final_answer": answer,
-        "messages": [AIMessage(
-            content=answer,
-            additional_kwargs={
-                "data_results": state.get("data_results", []),
-                "tool_query": state.get("tool_query", ""),
-                "next_step": ", ".join(state.get("tools_needed", [])),
-            }
-        )]
+        "messages": [
+            AIMessage(
+                content=answer,
+                additional_kwargs={
+                    "data_results": state.get("data_results", []),
+                    "tool_query": state.get("tool_query", ""),
+                    "next_step": ", ".join(state.get("tools_needed", [])),
+                },
+            )
+        ],
     }

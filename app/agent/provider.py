@@ -1,17 +1,17 @@
 import os
 
-# 1. Provide-Agnostic LLM Switcher (Dynamic)
+
 def get_llm(provider=None, model_name=None):
     provider = (provider or os.getenv("AI_PROVIDER", "groq")).lower()
     model_name = model_name or os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
-    
+
     if provider == "groq":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
-            model=model_name, 
-            temperature=0, 
+            model=model_name,
+            temperature=0,
             openai_api_key=os.getenv("GROQ_API_KEY"),
-            base_url="https://api.groq.com/openai/v1"
+            base_url="https://api.groq.com/openai/v1",
         )
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
@@ -20,30 +20,28 @@ def get_llm(provider=None, model_name=None):
         github_token = os.getenv("GITHUB_TOKEN")
         if not github_token or github_token == "your_github_pat_here":
             raise ValueError("GITHUB_TOKEN is missing or not set in .env")
-            
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
-            model=model_name, 
-            temperature=0, 
+            model=model_name,
+            temperature=0,
             api_key=github_token,
             base_url="https://models.inference.ai.azure.com",
             timeout=45,
-            max_retries=2
+            max_retries=2,
         )
     elif provider == "openrouter":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
-            model=model_name, 
-            temperature=0, 
+            model=model_name,
+            temperature=0,
             max_tokens=4096,
             api_key=os.getenv("OPENROUTER_API_KEY"),
             base_url="https://openrouter.ai/api/v1",
             default_headers={
                 "HTTP-Referer": "https://github.com/suranjitpartho/clinical-data-intelligence-system",
-                "X-Title": "Clinical Data Intelligence System"
-            }
+                "X-Title": "Clinical Data Intelligence System",
+            },
         )
-    
-    # Default fallback
+
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("AI_API_KEY"))

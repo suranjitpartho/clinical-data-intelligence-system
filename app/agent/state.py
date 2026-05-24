@@ -1,8 +1,8 @@
 import operator
 from typing import Annotated, List, Dict, Optional
 from typing_extensions import TypedDict
-
 from langgraph.graph.message import add_messages
+
 
 class AgentState(TypedDict):
     query: Annotated[str, lambda x, y: y]

@@ -13,16 +13,8 @@ from langgraph.checkpoint.base import (
 from app.db.base import DATABASE_URL
 
 
+# Wraps PostgresSaver's sync methods so LangGraph can call them asynchronously
 class _AsyncPostgresSaver(PostgresSaver):
-    """Bridges PostgresSaver's sync methods for LangGraph's async execution.
-
-    PostgresSaver only implements sync checkpointer methods (get_tuple, put,
-    put_writes). LangGraph's AsyncPregelLoop calls the async variants
-    (aget_tuple, aput, aput_writes), which raise NotImplementedError on the
-    base class. This wrapper delegates them to the sync implementations via
-    a thread-pool executor.
-    """
-
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.get_tuple, config)
@@ -56,6 +48,7 @@ _checkpointer: _AsyncPostgresSaver | None = None
 _setup_lock = threading.Lock()
 
 
+# Get or create the singleton checkpointer (creates connection pool on first call)
 def get_checkpointer() -> _AsyncPostgresSaver:
     global _checkpointer
     if _checkpointer is None:
@@ -72,6 +65,7 @@ def get_checkpointer() -> _AsyncPostgresSaver:
     return _checkpointer
 
 
+# Close the database connection pool
 def close_checkpointer() -> None:
     global _checkpointer
     if _checkpointer is not None and hasattr(_checkpointer.conn, "close"):
