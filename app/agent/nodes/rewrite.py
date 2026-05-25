@@ -1,5 +1,6 @@
 from langchain_core.messages import HumanMessage
 from app.agent.state import AgentState
+from app.agent.exceptions import LLMProviderError
 from app.agent.prompts import FOLLOW_UP_REWRITE_PROMPT
 
 
@@ -13,11 +14,18 @@ async def rewrite_node(state: AgentState, config, llm):
     if not history:
         return {"logs": "\n• Identifying search intent..."}
 
-    prompt = FOLLOW_UP_REWRITE_PROMPT.format(
-        history="\n".join(history), query=state["query"]
-    )
-    response = await llm.ainvoke(prompt, config)
-    rewritten_query = response.content.strip()
+    try:
+        prompt = FOLLOW_UP_REWRITE_PROMPT.format(
+            history="\n".join(history), query=state["query"]
+        )
+        response = await llm.ainvoke(prompt, config)
+        rewritten_query = response.content.strip()
+    except Exception as e:
+        err = LLMProviderError(str(e), node="rewrite")
+        return {
+            "error": {"code": err.code, "message": str(e), "node": err.node, "recoverable": err.recoverable, "details": err.details},
+            "logs": f"\n• Query rewrite failed: {e}",
+        }
 
     if "REWRITTEN STANDALONE QUERY:" in rewritten_query.upper():
         rewritten_query = rewritten_query.split(":", 1)[-1].strip()

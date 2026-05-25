@@ -76,6 +76,8 @@ function App() {
         data: m.data_results || null,
         tool_query: m.tool_query || null,
         nextStep: m.next_step || null,
+        isError: m.isError || m.is_error || false,
+        error_code: m.error_code || null,
       }));
       setMessages(msgs);
       setHistory(res.data.messages || []);
@@ -261,7 +263,8 @@ function App() {
               nextStep: data.next_step,
               tool_query: data.tool_query,
               logs: data.logs,
-              isError: false
+              isError: data.is_error || false,
+              error_code: data.error_code || null,
             };
             setMessages(prev => [...prev, aiResponse]);
             if (data.history) setHistory(data.history);
@@ -273,7 +276,9 @@ function App() {
             setMessages(prev => [...prev, {
               role: "ai",
               content: data.message || "An error occurred.",
-              isError: true
+              isError: true,
+              error_code: data.code || "UNKNOWN_ERROR",
+              logs: data.logs || "",
             }]);
             streamingRef.current = "";
             setStreamingContent("");
@@ -286,7 +291,8 @@ function App() {
       setMessages(prev => [...prev, {
         role: "ai",
         content: "Error: Could not connect to the Clinical Intelligence backend.",
-        isError: true
+        isError: true,
+        error_code: "NETWORK_ERROR",
       }]);
     } finally {
       setIsLoading(false);

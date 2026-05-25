@@ -1,4 +1,5 @@
 from app.agent.state import AgentState
+from app.agent.exceptions import GraphNodeError
 from app.services.refinement_utils import apply_data_refinement
 
 
@@ -9,7 +10,14 @@ def refine_node(state: AgentState):
     if not data_results or not isinstance(data_results, list):
         return {}
 
-    refined_data, refined_metadata, refinement_log = apply_data_refinement(data_results, metadata)
+    try:
+        refined_data, refined_metadata, refinement_log = apply_data_refinement(data_results, metadata)
+    except Exception as e:
+        err = GraphNodeError(str(e), node="refine", code="REFINE_ERROR", recoverable=False)
+        return {
+            "error": {"code": err.code, "message": str(e), "node": err.node, "recoverable": err.recoverable, "details": err.details},
+            "logs": f"\n• Data refinement failed: {e}.",
+        }
 
     medical_context = state.get("medical_context", [])
     filtered_medical_context = []

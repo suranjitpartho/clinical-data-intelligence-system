@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.schemas.query import QueryRequest, _format_sse
 from app.agent.service import arun_query, arun_query_stream
+from app.agent.exceptions import ClinicalError
 
 router = APIRouter(tags=["query"])
 
@@ -18,6 +19,11 @@ async def process_query(request: QueryRequest):
             model_name=request.model,
         )
         return result
+    except ClinicalError as e:
+        raise HTTPException(
+            status_code=400 if e.code in ("INVALID_QUERY", "THREAD_NOT_FOUND") else 500,
+            detail={"code": e.code, "message": str(e), "details": e.details},
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -25,19 +31,27 @@ async def process_query(request: QueryRequest):
 # Send a question and stream back the response token-by-token
 @router.post("/query/stream")
 async def process_query_stream(request: QueryRequest):
-    events = arun_query_stream(
-        query=request.query,
-        thread_id=request.thread_id,
-        history=request.history,
-        provider=request.provider,
-        model_name=request.model,
-    )
-    return StreamingResponse(
-        _format_sse(events),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    try:
+        events = arun_query_stream(
+            query=request.query,
+            thread_id=request.thread_id,
+            history=request.history,
+            provider=request.provider,
+            model_name=request.model,
+        )
+        return StreamingResponse(
+            _format_sse(events),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except ClinicalError as e:
+        raise HTTPException(
+            status_code=400 if e.code in ("INVALID_QUERY", "THREAD_NOT_FOUND") else 500,
+            detail={"code": e.code, "message": str(e), "details": e.details},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

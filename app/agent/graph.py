@@ -44,7 +44,8 @@ class ClinicalGraph:
         return "synthesis"
 
     def route_from_sql(self, state: AgentState):
-        if "ERROR" in (state.get("tool_query") or "") and state.get("error_count", 0) < 2:
+        err = state.get("error")
+        if err and err.get("recoverable") and state.get("error_count", 0) < 2:
             return "retry"
         if "rag" in state.get("tools_needed", []) and state.get("data_results"):
             return "rag"

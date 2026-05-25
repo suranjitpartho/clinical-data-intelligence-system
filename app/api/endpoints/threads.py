@@ -1,8 +1,9 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.agent.checkpointer import get_checkpointer
+from app.agent.exceptions import ThreadNotFoundError
 
 router = APIRouter(tags=["threads"])
 
@@ -61,7 +62,7 @@ async def get_thread(thread_id: str):
     loop = asyncio.get_event_loop()
     checkpoint_tuple = await loop.run_in_executor(None, checkpointer.get_tuple, config)
     if not checkpoint_tuple:
-        raise HTTPException(status_code=404, detail="Thread not found")
+        raise ThreadNotFoundError(details={"thread_id": thread_id})
     messages = []
     for msg in checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", []):
         role = "user" if getattr(msg, "type", "") == "human" else "assistant"

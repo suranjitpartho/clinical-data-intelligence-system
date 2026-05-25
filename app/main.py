@@ -4,16 +4,17 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 from app.api.endpoints.query import router as query_router
 from app.api.endpoints.threads import router as threads_router
 from app.api.endpoints.config import router as config_router
 from app.api.endpoints.analytics import router as analytics_router
 from app.api.endpoints.export import router as export_router
+from app.agent.exceptions import ClinicalError
 
 load_dotenv()
 
@@ -34,6 +35,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(ClinicalError)
+async def clinical_error_handler(request: Request, exc: ClinicalError):
+    status_map = {"INVALID_QUERY": 400, "THREAD_NOT_FOUND": 404, "SCHEMA_ERROR": 500}
+    return JSONResponse(
+        status_code=status_map.get(exc.code, 500),
+        content={"code": exc.code, "message": str(exc), "details": exc.details},
+    )
+
 
 app.include_router(query_router)
 app.include_router(threads_router)

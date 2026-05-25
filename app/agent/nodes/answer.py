@@ -19,12 +19,16 @@ def format_as_markdown_table(data):
 async def synthesis_node(state: AgentState, config, llm):
     metadata = state.get("data_metadata", {})
     data = state.get("data_results", [])
+    state_error = state.get("error")
 
     total = metadata.get("total_count", 0)
     cols = ", ".join(metadata.get("columns", []))
     db_error = metadata.get("error")
 
-    if db_error:
+    if state_error:
+        meta_summary = f"DATASET AUDIT [FAILURE]: The database query failed with the following error: {state_error.get('message', 'Unknown error')}. Please inform the user that a technical error occurred."
+        medical_context = ""
+    elif db_error:
         meta_summary = f"DATASET AUDIT [FAILURE]: The database query failed with the following error: {db_error}. Please inform the user that a technical error occurred."
         medical_context = ""
     else:

@@ -1,6 +1,26 @@
-import { Database, Search, Brain, AlertCircle, Download } from 'lucide-react';
+import { Database, Search, Brain, AlertCircle, Download, Clock, WifiOff, XCircle } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
+
+const ERROR_ICONS = {
+  RATE_LIMIT: Clock,
+  SQL_EXECUTION_FAILED: Database,
+  SQL_EXTRACTION_FAILED: Database,
+  LLM_PROVIDER_ERROR: Brain,
+  NETWORK_ERROR: WifiOff,
+  INVALID_QUERY: XCircle,
+};
+
+const ERROR_COLORS = {
+  RATE_LIMIT: 'text-amber-500',
+  SQL_EXECUTION_FAILED: 'text-red-500',
+  SQL_EXTRACTION_FAILED: 'text-red-500',
+  LLM_PROVIDER_ERROR: 'text-orange-500',
+  NETWORK_ERROR: 'text-red-500',
+  INVALID_QUERY: 'text-orange-500',
+};
+
+const DEFAULT_ERROR_ICON = AlertCircle;
 
 const NODE_LABELS = {
   rewrite: "Analyzing query...",
@@ -49,7 +69,20 @@ const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrol
                       ? 'py-3.5 px-4 rounded-md border border-red-500/40 flex gap-4 items-start bg-red-500/[0.02]'
                       : 'py-2'
                 }>
-                  {msg.isError && <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={28} strokeWidth={2} />}
+                  {msg.isError && (() => {
+                    const ErrorIcon = ERROR_ICONS[msg.error_code] || DEFAULT_ERROR_ICON;
+                    const colorClass = ERROR_COLORS[msg.error_code] || 'text-red-500';
+                    return (
+                      <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+                        <ErrorIcon className={`${colorClass}`} size={28} strokeWidth={2} />
+                        {msg.error_code && (
+                          <span className="text-[7px] font-bold uppercase tracking-wider text-red-400/60 max-w-[60px] text-center leading-tight">
+                            {msg.error_code.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="max-w-none">
                     {msg.role === 'ai' ? (
                       <div className="max-w-none">

@@ -17,6 +17,12 @@ class ExportRequest(BaseModel):
     sql: str
 
 
+class ErrorResponse(BaseModel):
+    code: str
+    message: str
+    details: dict | None = None
+
+
 class _SafeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):

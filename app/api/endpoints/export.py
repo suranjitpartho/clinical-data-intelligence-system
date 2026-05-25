@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.schemas.query import ExportRequest
 from app.services.refinement_utils import apply_data_refinement
+from app.agent.exceptions import InvalidQueryError
 
 router = APIRouter(tags=["export"])
 
@@ -14,7 +15,7 @@ router = APIRouter(tags=["export"])
 @router.post("/export-csv")
 async def export_csv(request: ExportRequest):
     if not request.sql or not request.sql.strip().upper().startswith(("SELECT", "WITH")):
-        raise HTTPException(status_code=400, detail="Invalid SQL query for export")
+        raise InvalidQueryError("Invalid SQL query for export")
 
     def generate_csv():
         db = SessionLocal()

@@ -6,6 +6,7 @@ from app.agent.state import AgentState
 from app.agent.schema_introspector import get_fk_relationship_map
 from app.agent.query_cache import save_to_cache
 from app.services.refinement_utils import apply_data_refinement
+from app.agent.exceptions import SQLExtractionError, SQLExecutionError, SchemaError
 from app.agent.prompts import (
     SQL_GENERATION_PROMPT,
     DISCOVERY_PROMPT,
@@ -20,11 +21,11 @@ def sql_node(state: AgentState, config, llm):
     session = SessionLocal()
 
     error_context = ""
-    if error_count > 0 and state.get("tool_query") and "ERROR" in state["tool_query"]:
-        raw = state["tool_query"]
-        parts = raw.split("--- ATTEMPTED SQL ---\n", 1)
-        error_msg = parts[0].replace("ERROR: ", "", 1).strip()
-        attempted_sql = parts[1] if len(parts) > 1 else ""
+    prev_error = state.get("error")
+    if error_count > 0 and prev_error:
+        details = prev_error.get("details", {})
+        attempted_sql = details.get("sql", "")
+        error_msg = prev_error.get("message", "")
         error_context = f"""
 [PREVIOUS SQL ATTEMPT] - review what you wrote:
 {attempted_sql}
@@ -55,8 +56,11 @@ Do NOT repeat the same mistake. Start fresh.
     except Exception as e:
         discovery_context += f"Discovery failed: {e}\n"
 
-    fk_map = get_fk_relationship_map()
-    fk_context = f"\n[DATABASE FOREIGN KEY RELATIONSHIPS - Source of Truth for all JOINs]:\n{fk_map}\n"
+    try:
+        fk_map = get_fk_relationship_map()
+        fk_context = f"\n[DATABASE FOREIGN KEY RELATIONSHIPS - Source of Truth for all JOINs]:\n{fk_map}\n"
+    except SchemaError as e:
+        fk_context = f"\n[SCHEMA INTROSPECTION UNAVAILABLE]: {e}. Proceeding without FK relationship data.\n"
 
     sql_prompt = (
         SQL_GENERATION_PROMPT.replace("{query}", query)
@@ -93,11 +97,13 @@ Do NOT repeat the same mistake. Start fresh.
 
     if not sql.upper().startswith("SELECT") and not sql.upper().startswith("WITH"):
         session.close()
+        err = SQLExtractionError(details={"llm_output": sql[:200]})
         return {
             "error_count": error_count + 1,
+            "error": {"code": err.code, "message": str(err), "node": err.node, "recoverable": err.recoverable, "details": err.details},
             "data_results": [],
-            "data_metadata": {"total_count": 0, "columns": [], "error": "SQL_EXTRACTION_FAILED"},
-            "tool_query": "ERROR: The AI failed to generate a valid SQL query.",
+            "data_metadata": {"total_count": 0, "columns": [], "error": err.code},
+            "tool_query": str(err),
             "logs": "\nERROR: Could not isolate a valid SQL SELECT or WITH statement.",
         }
 
@@ -145,10 +151,12 @@ Do NOT repeat the same mistake. Start fresh.
         session.rollback()
         session.close()
         error_msg = f"\n• Database query failed at attempt {error_count+1}\n• Refining approach and retrying..."
+        err = SQLExecutionError(str(e), sql=sql)
         return {
             "error_count": error_count + 1,
+            "error": {"code": err.code, "message": str(e), "node": err.node, "recoverable": err.recoverable, "details": err.details},
             "data_results": [],
-            "data_metadata": {"total_count": 0, "columns": [], "error": str(e)},
-            "tool_query": f"ERROR: {str(e)}\n--- ATTEMPTED SQL ---\n{sql}",
+            "data_metadata": {"total_count": 0, "columns": [], "error": err.code},
+            "tool_query": f"{str(e)}\n--- ATTEMPTED SQL ---\n{sql}",
             "logs": error_msg,
         }

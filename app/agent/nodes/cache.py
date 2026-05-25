@@ -3,6 +3,7 @@ from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.agent.state import AgentState
 from app.agent.query_cache import check_semantic_cache
+from app.agent.exceptions import CacheError
 from app.agent.prompts import DATA_DICTIONARY_JSON
 
 
@@ -56,9 +57,10 @@ def cache_node(state: AgentState):
             "logs": log_msg,
         }
     except Exception as e:
-        print(f"Error in cache node execution: {e}")
+        err = CacheError(str(e))
         return {
             "cache_hit": False,
+            "error": {"code": err.code, "message": str(e), "node": err.node, "recoverable": err.recoverable, "details": err.details},
             "logs": f"\n• Checking semantic query cache... Error: {e}. Falling back to normal pipeline.",
         }
     finally:

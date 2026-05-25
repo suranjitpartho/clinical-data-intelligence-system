@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.db.base import SessionLocal
 from app.models.logs import AuditLog
 from app.agent.graph import ClinicalGraph
+from app.agent.exceptions import ClinicalError, RateLimitError
 
 
 NODE_NAMES = {"rewrite", "cache_check", "classify", "sql_tool", "rag_tool", "refine", "synthesis"}
@@ -76,6 +77,7 @@ async def _resolve_thread(db, thread_id: str, query: str, history: list, memory,
             "medical_context": [],
             "final_answer": None,
             "error_count": 0,
+            "error": None,
             "logs": "",
             "cache_hit": None,
         }
@@ -104,6 +106,7 @@ def _build_response(state, prev_logs_len: int) -> dict:
         role = "user" if isinstance(m, HumanMessage) else "assistant"
         new_messages.append({"role": role, "content": m.content})
 
+    state_error = state.get("error")
     return {
         "final_answer": state.get("final_answer", ""),
         "next_step": ", ".join(state.get("tools_needed", [])),
@@ -112,16 +115,15 @@ def _build_response(state, prev_logs_len: int) -> dict:
         "tool_query": state.get("tool_query") or "",
         "logs": run_logs,
         "history": new_messages,
-        "is_error": False,
+        "is_error": state_error is not None,
+        "error_code": state_error.get("code") if state_error else None,
     }
 
 
 # Save audit log and report errors to Langfuse
 async def _finalize(db, query: str, state, callbacks: list):
-    tool_query = state.get("tool_query")
-    status = "Success"
-    if (tool_query and "ERROR" in tool_query) or state.get("is_error"):
-        status = "Error"
+    tool_query = state.get("tool_query") or "Query execution failed."
+    status = "Error" if state.get("error") else "Success"
 
     if status == "Error" and callbacks:
         try:
@@ -158,13 +160,16 @@ def _error_response(e):
     error_msg = str(e)
     print(f"[{type(e).__name__}]: {error_msg}")
     traceback.print_exc()
-    if "429" in error_msg or "rate limit" in error_msg.lower():
+
+    if isinstance(e, RateLimitError):
         return (
             "**Model Rate Limit Reached**: The current AI model has reached its daily or minute-level token limit. "
             "To continue your analysis without interruption, please switch to a different model or provider "
             "using the selection menu at the bottom of the left sidebar."
-        ), f"Technical Details: {error_msg}", True
-    return f"Graph Error ({type(e).__name__}): {error_msg}", "", True
+        ), f"Technical Details: {error_msg}", True, e.code if isinstance(e, ClinicalError) else "RATE_LIMIT"
+
+    code = e.code if isinstance(e, ClinicalError) else "UNKNOWN_ERROR"
+    return f"Graph Error ({type(e).__name__}): {error_msg}", "", True, code
 
 
 # Run a query through the AI graph and return the full answer
@@ -188,8 +193,8 @@ async def arun_query(
         await _finalize(db, query, final_state, callbacks)
         return _build_response(final_state, prev_logs_len)
     except Exception as e:
-        final_answer, logs, is_error = _error_response(e)
-        return {"final_answer": final_answer, "data_results": [], "logs": logs, "is_error": is_error}
+        final_answer, logs, is_error, error_code = _error_response(e)
+        return {"final_answer": final_answer, "data_results": [], "logs": logs, "is_error": is_error, "error_code": error_code}
     finally:
         db.close()
 
@@ -243,7 +248,7 @@ async def arun_query_stream(
         await _finalize(db, query, final_state, callbacks)
         yield {"type": "done", **_build_response(final_state, prev_logs_len)}
     except Exception as e:
-        final_answer, logs, _ = _error_response(e)
-        yield {"type": "error", "message": final_answer, "logs": logs}
+        final_answer, logs, _, error_code = _error_response(e)
+        yield {"type": "error", "message": final_answer, "logs": logs, "code": error_code}
     finally:
         db.close()
