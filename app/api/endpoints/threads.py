@@ -1,9 +1,13 @@
 import asyncio
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.agent.checkpointer import get_checkpointer
 from app.agent.exceptions import ThreadNotFoundError
+from app.agent.graph import ClinicalGraph
+from app.agent.service import arun_resume_stream
+from app.schemas.query import ResumeRequest, _format_sse
 
 router = APIRouter(tags=["threads"])
 
@@ -83,3 +87,60 @@ async def get_thread(thread_id: str):
         "title": meta.get("thread_title", "Untitled"),
         "created_at": meta.get("created_at"),
     }
+
+
+# Resume a paused thread with clarification answers
+@router.post("/threads/{thread_id}/resume")
+async def resume_thread(thread_id: str, request: ResumeRequest):
+    try:
+        events = arun_resume_stream(
+            thread_id=thread_id,
+            answers=request.answers,
+            provider=request.provider,
+            model_name=request.model,
+            request_id=request.request_id,
+        )
+        return StreamingResponse(
+            _format_sse(events),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Get current graph state (includes pending interrupts)
+@router.get("/threads/{thread_id}/state")
+async def get_thread_state(thread_id: str):
+    graph = ClinicalGraph()
+    try:
+        snapshot = await graph.workflow.aget_state(
+            {"configurable": {"thread_id": thread_id}}
+        )
+        if not snapshot:
+            raise ThreadNotFoundError(details={"thread_id": thread_id})
+        interrupt_data = None
+        if snapshot.tasks:
+            for task in snapshot.tasks:
+                if hasattr(task, 'interrupts') and task.interrupts:
+                    interrupt_data = task.interrupts[0].value
+                    break
+        values = snapshot.values or {}
+        return {
+            "thread_id": thread_id,
+            "interrupted": interrupt_data is not None,
+            "clarification_questions": interrupt_data.get("questions", []) if interrupt_data else [],
+            "next_node": snapshot.next[0] if snapshot.next else None,
+            "messages": [
+                {"role": "user" if getattr(m, "type", "") == "human" else "assistant", "content": m.content}
+                for m in values.get("messages", [])
+            ],
+        }
+    except ThreadNotFoundError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

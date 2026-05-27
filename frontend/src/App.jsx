@@ -8,6 +8,7 @@ import MessageList from './components/Chat/MessageList';
 import ChatInput from './components/Chat/ChatInput';
 import TraceSidebar from './components/TraceSidebar';
 import AnalyticsView from './components/Analytics';
+import ClarifyCard from './components/Chat/ClarifyCard';
 
 
 const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
@@ -36,6 +37,9 @@ function App() {
 
   const [streamingContent, setStreamingContent] = useState("");
   const [currentNode, setCurrentNode] = useState("");
+  const [pendingQuestions, setPendingQuestions] = useState(null);
+  const [isClarifying, setIsClarifying] = useState(false);
+  const [requestId, setRequestId] = useState(null);
   const [threadsHasMore, setThreadsHasMore] = useState(false);
   const streamingRef = useRef("");
   const threadsPageRef = useRef(1);
@@ -95,6 +99,7 @@ function App() {
   };
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
 
   const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
     setIsAnalyticsLoading(true);
@@ -137,17 +142,38 @@ function App() {
 
   const handleSyncAnalytics = async () => {
     setIsSyncing(true);
+    setSyncStatus("syncing");
     try {
       await axios.post(`${API_BASE}/analytics/sync`, null, {
         params: { days: analyticsRange }
       });
-      // After sync, immediately refresh local views from DB
+
+      setSyncStatus("polling");
+      let found = false;
+      for (let attempt = 1; attempt <= 12; attempt++) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const res = await axios.get(`${API_BASE}/analytics`, {
+            params: { days: analyticsRange, page: 1, page_size: analyticsPageSize }
+          });
+          if (res.data?.recent_traces?.length > 0) {
+            setAnalyticsData(res.data);
+            found = true;
+            setSyncStatus("complete");
+            break;
+          }
+        } catch (_) { /* retry on error */ }
+        setSyncStatus(`polling_${attempt}`);
+      }
+      if (!found) setSyncStatus("timeout");
+
       await Promise.all([
         fetchAnalytics(analyticsRange, 1, analyticsPageSize),
         fetchOperationalAnalytics(analyticsRange)
       ]);
     } catch (error) {
       console.error("Sync error:", error);
+      setSyncStatus("timeout");
       alert("Intelligence sync failed. Verify Langfuse connectivity.");
     } finally {
       setIsSyncing(false);
@@ -272,6 +298,15 @@ function App() {
             setStreamingContent("");
             setCurrentNode("");
             fetchThreads();
+          } else if (event === "clarify") {
+            setPendingQuestions(data.questions);
+            setIsClarifying(true);
+            setRequestId(data.request_id || null);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            setIsLoading(false);
+            return;
           } else if (event === "error") {
             setMessages(prev => [...prev, {
               role: "ai",
@@ -294,6 +329,115 @@ function App() {
         isError: true,
         error_code: "NETWORK_ERROR",
       }]);
+    } finally {
+      setIsLoading(false);
+      setCurrentNode("");
+    }
+  };
+
+  const handleClarifySubmit = async (answers) => {
+    setIsLoading(true);
+    try {
+      const body = {
+        thread_id: threadId,
+        answers: answers,
+        model: selectedModel,
+        provider: selectedProvider,
+      };
+      if (requestId) body.request_id = requestId;
+
+      const response = await fetch(`${API_BASE}/threads/${threadId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      streamingRef.current = "";
+      setStreamingContent("");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split("\n");
+          let event = "";
+          let dataRaw = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataRaw = line.slice(6);
+          }
+
+          if (!dataRaw) continue;
+          const data = JSON.parse(dataRaw);
+
+          if (event === "node_start") {
+            setCurrentNode(data.node);
+          } else if (event === "token") {
+            streamingRef.current += data.content;
+            setStreamingContent(streamingRef.current);
+          } else if (event === "done") {
+            const aiResponse = {
+              role: "ai",
+              content: streamingRef.current,
+              data: data.data_results,
+              nextStep: data.next_step,
+              tool_query: data.tool_query,
+              logs: data.logs,
+              isError: data.is_error || false,
+              error_code: data.error_code || null,
+            };
+            setMessages(prev => [...prev, aiResponse]);
+            if (data.history) setHistory(data.history);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            setPendingQuestions(null);
+            setIsClarifying(false);
+            setRequestId(null);
+            fetchThreads();
+          } else if (event === "error") {
+            setMessages(prev => [...prev, {
+              role: "ai",
+              content: data.message || "An error occurred.",
+              isError: true,
+              error_code: data.code || "UNKNOWN_ERROR",
+              logs: data.logs || "",
+            }]);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            setPendingQuestions(null);
+            setIsClarifying(false);
+            setRequestId(null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Resume stream error:", error);
+      setMessages(prev => [...prev, {
+        role: "ai",
+        content: "Error: Could not resume the query.",
+        isError: true,
+        error_code: "NETWORK_ERROR",
+      }]);
+      setPendingQuestions(null);
+      setIsClarifying(false);
+      setRequestId(null);
     } finally {
       setIsLoading(false);
       setCurrentNode("");
@@ -361,14 +505,26 @@ function App() {
                 traceLogs={traceLogs}
                 setTraceLogs={setTraceLogs}
                 onExport={handleExport}
+                pendingQuestions={pendingQuestions}
               />
 
-              <ChatInput
-                input={input}
-                setInput={setInput}
-                handleSend={handleSend}
-                isLoading={isLoading}
-              />
+              {isClarifying && pendingQuestions ? (
+                <div className="w-full pt-2.5 pb-2 px-6 flex flex-col items-center bg-[#080C14]/90 backdrop-blur-2xl self-end z-20">
+                  <div className="w-full max-w-3xl">
+                    <ClarifyCard
+                      questions={pendingQuestions}
+                      onSubmit={handleClarifySubmit}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  handleSend={handleSend}
+                  isLoading={isLoading}
+                />
+              )}
             </>
           ) : (
             <AnalyticsView
@@ -378,6 +534,7 @@ function App() {
               setSubView={setAnalyticsSubView}
               isLoading={isAnalyticsLoading}
               isSyncing={isSyncing}
+              syncStatus={syncStatus}
               onSync={handleSyncAnalytics}
               onBack={() => setCurrentView('chat')}
               range={analyticsRange}

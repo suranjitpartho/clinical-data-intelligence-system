@@ -23,33 +23,43 @@ class ObservabilitySyncService:
     def sync_latest(self, days_back: int = 30):
         db = SessionLocal()
         try:
-            fetch_from = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_back)
-            remote_traces = []
-            for page in range(1, 20):
-                for attempt in range(3):
-                    try:
-                        res = self.langfuse.api.trace.list(
-                            from_timestamp=fetch_from, limit=100, page=page
-                        )
-                        data = res.data if hasattr(res, "data") else []
-                        remote_traces.extend(data)
-                        if len(data) < 100:
-                            page = 999
-                        time.sleep(0.5)
+            def _fetch_new_traces():
+                fetch_from = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_back)
+                remote_traces = []
+                for page in range(1, 20):
+                    for attempt in range(3):
+                        try:
+                            res = self.langfuse.api.trace.list(
+                                from_timestamp=fetch_from, limit=100, page=page
+                            )
+                            data = res.data if hasattr(res, "data") else []
+                            remote_traces.extend(data)
+                            if len(data) < 100:
+                                page = 999
+                            time.sleep(0.5)
+                            break
+                        except Exception as e:
+                            wait = (attempt + 1) * 3
+                            print(f"[Sync] List page {page} failed (attempt {attempt+1}/3): {e}. Waiting {wait}s...")
+                            time.sleep(wait)
+                    else:
+                        print(f"[Sync] Giving up on list page {page} after 3 attempts.")
                         break
-                    except Exception as e:
-                        wait = (attempt + 1) * 3
-                        print(f"[Sync] List page {page} failed (attempt {attempt+1}/3): {e}. Waiting {wait}s...")
-                        time.sleep(wait)
-                else:
-                    print(f"[Sync] Giving up on list page {page} after 3 attempts.")
-                    break
-                if page == 999:
-                    break
+                    if page == 999:
+                        break
 
-            existing_ids = set(row[0] for row in db.query(InferenceTrace.trace_id).all())
-            new_traces = [t for t in remote_traces if t.id not in existing_ids]
-            print(f"[Sync] Found {len(remote_traces)} remote traces, {len(existing_ids)} already synced, {len(new_traces)} new.")
+                existing_ids = set(row[0] for row in db.query(InferenceTrace.trace_id).all())
+                new_traces = [t for t in remote_traces if t.id not in existing_ids]
+                print(f"[Sync] Found {len(remote_traces)} remote traces, {len(existing_ids)} already synced, {len(new_traces)} new.")
+                return new_traces, existing_ids
+
+            new_traces, existing_ids = _fetch_new_traces()
+            retry_attempts = 0
+            while len(new_traces) == 0 and retry_attempts < 6:
+                retry_attempts += 1
+                print(f"[Sync] No new traces (eventual consistency), retrying in 5s (attempt {retry_attempts}/6)...")
+                time.sleep(5)
+                new_traces, _ = _fetch_new_traces()
 
             synced = 0
             batch_limit = 100
@@ -83,14 +93,17 @@ class ObservabilitySyncService:
             db.close()
 
     def _upsert_trace_data(self, db: Session, t_full):
-        WHITELIST = ["rewrite", "cache_check", "classify", "sql_tool", "rag_tool", "refine", "synthesis"]
+        WHITELIST = ["rewrite", "cache_check", "clarify_generate", "clarify_resume", "classify", "sql_tool", "rag_tool", "refine", "synthesis"]
 
         trace_record = db.query(InferenceTrace).filter(InferenceTrace.trace_id == t_full.id).first()
         if not trace_record:
             trace_record = InferenceTrace(trace_id=t_full.id)
             db.add(trace_record)
 
+        trace_meta = getattr(t_full, "metadata", None) or {}
         trace_record.session_id = getattr(t_full, "session_id", None)
+        lf_meta = trace_meta.get("langfuse_metadata", {}) or {}
+        trace_record.request_id = lf_meta.get("request_id") or trace_meta.get("request_id")
         trace_record.name = t_full.name
         trace_record.timestamp = t_full.timestamp
         trace_record.total_latency = float(getattr(t_full, "latency", 0) or 0)
@@ -175,6 +188,7 @@ class ObservabilitySyncService:
             span_record = InferenceSpan(
                 span_id=sd["ids"][0],
                 trace_id=t_full.id,
+                request_id=trace_record.request_id,
                 name=name.upper(),
                 span_type="NODE",
                 model=sd["model"],

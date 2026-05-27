@@ -1,16 +1,27 @@
 import os
+import uuid
 import asyncio
 import datetime
+import logging
 from typing import List, Dict, AsyncGenerator
 from sqlalchemy import text
 from langchain_core.messages import HumanMessage, AIMessage
 from app.db.base import SessionLocal
 from app.models.logs import AuditLog
+from langgraph.types import Command
 from app.agent.graph import ClinicalGraph
 from app.agent.exceptions import ClinicalError, RateLimitError
 
+logging.basicConfig(
+    filename=os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.log"),
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    force=True,
+)
+logger = logging.getLogger(__name__)
 
-NODE_NAMES = {"rewrite", "cache_check", "classify", "sql_tool", "rag_tool", "refine", "synthesis"}
+
+NODE_NAMES = {"rewrite", "cache_check", "clarify_generate", "clarify_resume", "classify", "sql_tool", "rag_tool", "refine", "synthesis"}
 
 
 # Setup Langfuse for tracking AI calls
@@ -38,6 +49,8 @@ async def _resolve_thread(db, thread_id: str, query: str, history: list, memory,
         },
     }
 
+    logger.info(f"Resolving thread {thread_id} (existing={db.execute(text('SELECT 1 FROM checkpoints WHERE thread_id = :tid LIMIT 1'), {'tid': thread_id}).fetchone() is not None})")
+
     existing = db.execute(
         text("SELECT 1 FROM checkpoints WHERE thread_id = :tid LIMIT 1"),
         {"tid": thread_id},
@@ -54,9 +67,9 @@ async def _resolve_thread(db, thread_id: str, query: str, history: list, memory,
 
         input_state = {"query": query, "messages": [HumanMessage(content=query)]}
     else:
-        config["metadata"]["thread_title"] = (
-            history[0]["content"][:80] if history else query[:80]
-        )
+        title = history[0]["content"][:80] if history else query[:80]
+        config["metadata"]["thread_title"] = title
+        config["metadata"]["langfuse_trace_name"] = title
         config["metadata"]["created_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         message_history = []
@@ -127,10 +140,10 @@ async def _finalize(db, query: str, state, callbacks: list):
 
     if status == "Error" and callbacks:
         try:
-            trace_id = callbacks[0].get_trace_id()
-            if trace_id:
+            error_trace_id = callbacks[0].last_trace_id
+            if error_trace_id:
                 callbacks[0].langfuse.trace(
-                    id=trace_id,
+                    id=error_trace_id,
                     level="ERROR",
                     status_message=tool_query or "Query execution failed.",
                 )
@@ -183,10 +196,10 @@ async def arun_query(
     graph = ClinicalGraph(provider=provider, model_name=model_name)
     db = SessionLocal()
     try:
-        callbacks = _init_callbacks()
         config, input_state, prev_logs_len = await _resolve_thread(
             db, thread_id, query, history, graph.memory, graph.model_name,
         )
+        callbacks = _init_callbacks()
         config["callbacks"] = callbacks
 
         final_state = await graph.workflow.ainvoke(input_state, config=config)
@@ -210,11 +223,14 @@ async def arun_query_stream(
     graph = ClinicalGraph(provider=provider, model_name=model_name)
     db = SessionLocal()
     try:
-        callbacks = _init_callbacks()
         config, input_state, prev_logs_len = await _resolve_thread(
             db, thread_id, query, history, graph.memory, graph.model_name,
         )
+        callbacks = _init_callbacks()
         config["callbacks"] = callbacks
+
+        request_id = uuid.uuid4().hex
+        config["metadata"]["langfuse_metadata"] = {"request_id": request_id}
 
         current_node = None
         async for event in graph.workflow.astream_events(input_state, config, version="v2"):
@@ -233,6 +249,28 @@ async def arun_query_stream(
                 if token_text:
                     yield {"type": "token", "content": token_text}
 
+        # Check if graph was interrupted by clarify node
+        logger.info(f"Stream ended for {thread_id}, checking for interrupts")
+        snapshot = await graph.workflow.aget_state(
+            {"configurable": {"thread_id": thread_id}}
+        )
+        if snapshot and snapshot.tasks:
+            for task in snapshot.tasks:
+                if hasattr(task, 'interrupts') and task.interrupts:
+                    questions = task.interrupts[0].value.get("questions", [])
+                    logger.info(f"Interrupt found for {thread_id}: {len(questions)} questions")
+                    yield {"type": "clarify", "questions": questions, "request_id": request_id}
+                    if callbacks:
+                        try:
+                            tid = callbacks[0].last_trace_id
+                            if tid:
+                                callbacks[0].langfuse.trace(id=tid, input=query)
+                                callbacks[0].flush()
+                        except Exception:
+                            pass
+                    return
+        logger.info(f"No interrupt found for {thread_id}, normal completion")
+
         loop = asyncio.get_event_loop()
         cp = await loop.run_in_executor(
             None,
@@ -245,6 +283,14 @@ async def arun_query_stream(
             yield {"type": "error", "message": "Failed to retrieve final graph state"}
             return
 
+        if callbacks:
+            try:
+                tid = callbacks[0].last_trace_id
+                if tid:
+                    callbacks[0].langfuse.trace(id=tid, input=query)
+            except Exception:
+                pass
+
         await _finalize(db, query, final_state, callbacks)
         yield {"type": "done", **_build_response(final_state, prev_logs_len)}
     except Exception as e:
@@ -252,3 +298,67 @@ async def arun_query_stream(
         yield {"type": "error", "message": final_answer, "logs": logs, "code": error_code}
     finally:
         db.close()
+
+
+async def arun_resume_stream(
+    thread_id: str,
+    answers: list,
+    provider: str = None,
+    model_name: str = None,
+    request_id: str = None,
+) -> AsyncGenerator[Dict, None]:
+    graph = ClinicalGraph(provider=provider, model_name=model_name)
+    loop = asyncio.get_event_loop()
+    cp = await loop.run_in_executor(
+        None,
+        graph.memory.get_tuple,
+        {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}},
+    )
+    existing_meta = cp.metadata or {} if cp else {}
+    callbacks = _init_callbacks()
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "metadata": {
+            "source": os.getenv("ENV", "development"),
+            "agent": "clinical-intelligence",
+            "model": model_name,
+            "langfuse_session_id": thread_id,
+            "langfuse_tags": ["clinical-intelligence", model_name],
+            "thread_title": existing_meta.get("thread_title", "Untitled"),
+            "created_at": existing_meta.get("created_at"),
+            "langfuse_trace_name": f"Clarify Resume — {existing_meta.get('thread_title', 'Untitled')}",
+            "langfuse_metadata": {"request_id": request_id} if request_id else {},
+        },
+        "callbacks": callbacks,
+    }
+    logger.info(f"Resuming thread {thread_id} with {len(answers)} answers")
+    try:
+        final_state = await graph.workflow.ainvoke(
+            Command(resume=answers), config,
+        )
+        logger.info(f"Resume completed for thread {thread_id}")
+
+        enriched_query = final_state.get("query", "")
+        if callbacks and enriched_query:
+            try:
+                tid = callbacks[0].last_trace_id
+                if tid:
+                    callbacks[0].langfuse.trace(id=tid, input=enriched_query)
+            except Exception:
+                pass
+
+        answer = final_state.get("final_answer", "")
+        if answer:
+            yield {"type": "token", "content": answer}
+
+        if callbacks:
+            try:
+                callbacks[0]._langfuse_client.flush()
+            except Exception:
+                pass
+
+        yield {"type": "done", **_build_response(final_state, 0)}
+    except Exception as e:
+        logger.error(f"Resume failed for thread {thread_id}: {e}", exc_info=True)
+        final_answer, logs, _, error_code = _error_response(e)
+        yield {"type": "error", "message": final_answer, "logs": logs, "code": error_code}

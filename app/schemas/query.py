@@ -17,6 +17,14 @@ class ExportRequest(BaseModel):
     sql: str
 
 
+class ResumeRequest(BaseModel):
+    thread_id: str
+    answers: list[dict] = []
+    model: str = None
+    provider: str = None
+    request_id: str = None
+
+
 class ErrorResponse(BaseModel):
     code: str
     message: str
@@ -27,7 +35,7 @@ class _SafeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
             return float(obj)
-        if isinstance(obj, datetime.datetime):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
             return obj.isoformat()
         if isinstance(obj, UUID):
             return str(obj)

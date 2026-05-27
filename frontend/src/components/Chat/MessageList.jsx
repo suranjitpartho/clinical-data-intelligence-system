@@ -1,6 +1,7 @@
 import { Database, Search, Brain, AlertCircle, Download, Clock, WifiOff, XCircle } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
+import ClarifyCard from './ClarifyCard';
 
 const ERROR_ICONS = {
   RATE_LIMIT: Clock,
@@ -32,7 +33,7 @@ const NODE_LABELS = {
   synthesis: "Generating response...",
 };
 
-const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport }) => {
+const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport, pendingQuestions }) => {
   return (
     <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
       <div className="max-w-3xl mx-auto w-full p-4 space-y-5 pb-6">

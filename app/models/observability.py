@@ -9,6 +9,7 @@ class InferenceTrace(Base):
     __tablename__ = "inference_traces"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(String, index=True)
     trace_id = Column(String, unique=True, index=True, nullable=False)
     session_id = Column(String, index=True)
     name = Column(String, index=True) # Feature identifier
@@ -41,6 +42,7 @@ class InferenceSpan(Base):
     __tablename__ = "inference_spans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(String, index=True)
     trace_id = Column(String, ForeignKey("inference_traces.trace_id", ondelete="CASCADE"), nullable=False)
     span_id = Column(String, unique=True, index=True, nullable=False)
     

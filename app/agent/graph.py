@@ -10,6 +10,7 @@ from app.agent.nodes.rag import rag_node
 from app.agent.nodes.refine import refine_node
 from app.agent.nodes.answer import synthesis_node
 from app.agent.nodes.cache import cache_node
+from app.agent.nodes.clarify import clarify_generate_node, clarify_resume_node
 
 
 def _bind_llm(fn, llm):
@@ -56,6 +57,8 @@ class ClinicalGraph:
 
         graph.add_node("rewrite", _bind_llm(rewrite_node, self.llm))
         graph.add_node("cache_check", cache_node)
+        graph.add_node("clarify_generate", _bind_llm(clarify_generate_node, self.llm))
+        graph.add_node("clarify_resume", _bind_llm(clarify_resume_node, self.llm))
         graph.add_node("classify", _bind_llm(classify_node, self.llm))
         graph.add_node("sql_tool", _bind_llm(sql_node, self.llm))
         graph.add_node("rag_tool", rag_node)
@@ -68,7 +71,7 @@ class ClinicalGraph:
         graph.add_conditional_edges(
             "cache_check",
             self.route_from_cache,
-            {"synthesis": "synthesis", "classify": "classify"},
+            {"synthesis": "synthesis", "classify": "clarify_generate"},
         )
 
         graph.add_conditional_edges(
@@ -83,6 +86,8 @@ class ClinicalGraph:
             {"retry": "sql_tool", "rag": "rag_tool", "refine": "refine"},
         )
 
+        graph.add_edge("clarify_generate", "clarify_resume")
+        graph.add_edge("clarify_resume", "classify")
         graph.add_edge("rag_tool", "refine")
         graph.add_edge("refine", "synthesis")
         graph.add_edge("synthesis", END)

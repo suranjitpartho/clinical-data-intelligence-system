@@ -51,6 +51,7 @@ class AnalyticsService:
             for t in traces:
                 trace_list.append({
                     "id": str(t.trace_id),
+                    "request_id": t.request_id,
                     "session_id": t.session_id,
                     "timestamp": t.timestamp.isoformat(),
                     "input": t.input_preview or "Clinical Consultation",

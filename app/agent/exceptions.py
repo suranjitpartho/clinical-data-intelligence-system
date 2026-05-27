@@ -82,3 +82,17 @@ class InvalidQueryError(ClinicalError):
     def __init__(self, message: str, *, code: str = "INVALID_QUERY",
                  details: dict | None = None):
         super().__init__(message, code=code, details=details, recoverable=False)
+
+
+class InterruptTimeout(ClinicalError):
+    """User did not respond to clarification within the expected time."""
+    def __init__(self, message: str = "Clarification response timed out.",
+                 *, code: str = "INTERRUPT_TIMEOUT", details: dict | None = None):
+        super().__init__(message, code=code, details=details, recoverable=False)
+
+
+class ResumeError(ClinicalError):
+    """Resume data was invalid or malformed."""
+    def __init__(self, message: str, *, code: str = "RESUME_ERROR",
+                 details: dict | None = None):
+        super().__init__(message, code=code, details=details, recoverable=False)

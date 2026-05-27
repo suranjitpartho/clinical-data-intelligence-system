@@ -24,7 +24,7 @@ const TraceItem = ({ trace, isExpanded, onToggleExpand, onSqlView, isSqlOpen, se
                 {new Date(trace.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
               <span className="w-1 h-1 bg-gray-700 rounded-full"></span>
-              <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">ID: {trace.id.slice(-8)}</span>
+              <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">ID: {trace.request_id ? trace.request_id.slice(-8) : '---'}</span>
               {isError && (
                 <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border"
                   style={{ color: '#F87171', borderColor: 'rgba(248, 113, 113, 0.3)', backgroundColor: 'rgba(248, 113, 113, 0.08)' }}>

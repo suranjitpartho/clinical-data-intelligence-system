@@ -16,5 +16,7 @@ class AgentState(TypedDict):
     final_answer: Annotated[Optional[str], lambda x, y: y]
     error_count: Annotated[int, lambda x, y: y]
     error: Annotated[Optional[Dict], lambda x, y: y]
+    clarification_questions: Annotated[Optional[List[Dict]], lambda x, y: y]
+    clarification_answers: Annotated[Optional[List[Dict]], lambda x, y: y]
     logs: Annotated[str, operator.add]
     cache_hit: Annotated[Optional[bool], lambda x, y: y]
