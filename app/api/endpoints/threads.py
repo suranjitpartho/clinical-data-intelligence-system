@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from app.db.base import SessionLocal
@@ -8,8 +8,9 @@ from app.agent.exceptions import ThreadNotFoundError
 from app.agent.graph import ClinicalGraph
 from app.agent.service import arun_resume_stream
 from app.schemas.query import ResumeRequest, _format_sse
+from app.auth.deps import get_current_user
 
-router = APIRouter(tags=["threads"])
+router = APIRouter(tags=["threads"], dependencies=[Depends(get_current_user)])
 
 
 # List all past conversations for the sidebar

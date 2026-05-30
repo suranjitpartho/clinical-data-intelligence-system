@@ -1,14 +1,15 @@
 import csv
 import io
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from app.db.base import SessionLocal
 from app.schemas.query import ExportRequest
 from app.services.refinement_utils import apply_data_refinement
 from app.agent.exceptions import InvalidQueryError
+from app.auth.deps import get_current_user
 
-router = APIRouter(tags=["export"])
+router = APIRouter(tags=["export"], dependencies=[Depends(get_current_user)])
 
 
 # Download query results as a CSV file

@@ -8,11 +8,16 @@ from sqlalchemy import func, desc
 
 class AnalyticsService:
     def __init__(self):
-        self.langfuse = Langfuse(
-            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-            host=os.getenv("LANGFUSE_HOST"),
-        )
+        self.langfuse = None
+        if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+            try:
+                self.langfuse = Langfuse(
+                    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+                    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+                    host=os.getenv("LANGFUSE_HOST"),
+                )
+            except Exception:
+                pass
         self._cache_duration = datetime.timedelta(minutes=5)
 
     def get_system_metrics(self, days_back: int = 7, page: int = 1, page_size: int = 10):

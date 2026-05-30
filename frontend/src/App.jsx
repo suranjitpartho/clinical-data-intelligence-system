@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import api, { API_BASE } from './utils/api';
+import { useAuth } from './context/AuthContext';
+import LoginPage from './components/Auth/LoginPage';
 
 // Components
 import Header from './components/Header';
@@ -11,9 +13,8 @@ import AnalyticsView from './components/Analytics';
 import ClarifyCard from './components/Chat/ClarifyCard';
 
 
-const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
-
 function App() {
+  const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
   const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'
   const [messages, setMessages] = useState([]);
   const [history, setHistory] = useState([]);
@@ -48,7 +49,7 @@ function App() {
 
   const fetchThreads = async (page = 1) => {
     try {
-      const res = await axios.get(`${API_BASE}/threads`, {
+      const res = await api.get('/threads', {
         params: { page, page_size: 25 }
       });
       const data = res.data || {};
@@ -73,7 +74,7 @@ function App() {
     setCurrentView('chat');
     setIsTraceOpen(false);
     try {
-      const res = await axios.get(`${API_BASE}/threads/${tid}`);
+      const res = await api.get(`/threads/${tid}`);
       const msgs = (res.data.messages || []).map(m => ({
         role: m.role,
         content: m.content,
@@ -104,7 +105,7 @@ function App() {
   const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
     setIsAnalyticsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/analytics`, {
+      const res = await api.get('/analytics', {
         params: { days, page, page_size: pageSize }
       });
       if (res.data && !res.data.error) {
@@ -126,7 +127,7 @@ function App() {
   const fetchOperationalAnalytics = async (days = analyticsRange) => {
     setIsAnalyticsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/analytics/operational`, {
+      const res = await api.get('/analytics/operational', {
         params: { days }
       });
       if (res.data) {
@@ -144,7 +145,7 @@ function App() {
     setIsSyncing(true);
     setSyncStatus("syncing");
     try {
-      await axios.post(`${API_BASE}/analytics/sync`, null, {
+      await api.post('/analytics/sync', null, {
         params: { days: analyticsRange }
       });
 
@@ -153,7 +154,7 @@ function App() {
       for (let attempt = 1; attempt <= 12; attempt++) {
         await new Promise(r => setTimeout(r, 3000));
         try {
-          const res = await axios.get(`${API_BASE}/analytics`, {
+          const res = await api.get('/analytics', {
             params: { days: analyticsRange, page: 1, page_size: analyticsPageSize }
           });
           if (res.data?.recent_traces?.length > 0) {
@@ -201,8 +202,8 @@ function App() {
     const fetchConfig = async () => {
       try {
         const [configRes, modelsRes] = await Promise.all([
-          axios.get(`${API_BASE}/config`),
-          axios.get(`${API_BASE}/models`)
+          api.get('/config'),
+          api.get('/models')
         ]);
 
         setAvailableModels(modelsRes.data);
@@ -215,8 +216,13 @@ function App() {
       }
     };
     fetchConfig();
-    fetchThreads();
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchThreads();
+    }
+  }, [isAuthenticated]);
 
   const handleSend = async (e) => {
     if (e) e.preventDefault();
@@ -235,7 +241,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/query/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({
           query: originalInput,
           model: selectedModel,
@@ -348,7 +354,7 @@ function App() {
 
       const response = await fetch(`${API_BASE}/threads/${threadId}/resume`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify(body),
       });
 
@@ -447,7 +453,7 @@ function App() {
   const handleExport = async (sql) => {
     if (!sql) return;
     try {
-      const response = await axios.post(`${API_BASE}/export-csv`, { sql }, { responseType: 'blob' });
+      const response = await api.post('/export-csv', { sql }, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -462,9 +468,24 @@ function App() {
     }
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-dark-bg text-gray-500 text-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 border border-clinical-blue border-t-transparent rounded-full animate-spin"></div>
+          Signing in...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-dark-bg font-sans text-gray-100 overflow-hidden relative">
-      <Header />
+      <Header user={user} onLogout={logout} />
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Ambient background glows for depth */}

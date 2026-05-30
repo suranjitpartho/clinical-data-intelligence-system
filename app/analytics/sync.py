@@ -13,14 +13,21 @@ from langfuse import Langfuse
 
 class ObservabilitySyncService:
     def __init__(self):
-        self.langfuse = Langfuse(
-            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-            host=os.getenv("LANGFUSE_HOST"),
-            timeout=30,
-        )
+        self.langfuse = None
+        if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+            try:
+                self.langfuse = Langfuse(
+                    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+                    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+                    host=os.getenv("LANGFUSE_HOST"),
+                    timeout=30,
+                )
+            except Exception:
+                pass
 
     def sync_latest(self, days_back: int = 30):
+        if not self.langfuse:
+            return {"status": "error", "message": "Langfuse is not configured. Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY."}
         db = SessionLocal()
         try:
             def _fetch_new_traces():

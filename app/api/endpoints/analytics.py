@@ -1,7 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 from app.analytics import analytics_service, obs_sync_service
+from app.auth.deps import get_current_user
 
-router = APIRouter(tags=["analytics"])
+router = APIRouter(tags=["analytics"], dependencies=[Depends(get_current_user)])
 
 
 # Get dashboard summary (total queries, errors, token usage)

@@ -14,10 +14,14 @@ from app.agent.exceptions import ClinicalError, RateLimitError
 
 logging.basicConfig(
     filename=os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.log"),
-    level=logging.DEBUG,
+    level=logging.ERROR,
     format="%(asctime)s [%(levelname)s] %(message)s",
     force=True,
 )
+
+for log_name in ("app.agent", "app.api", "app.auth"):
+    logging.getLogger(log_name).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 

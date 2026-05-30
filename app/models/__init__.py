@@ -5,6 +5,7 @@ from .business import Billing, MedicalSupply
 from .logs import AuditLog
 from .observability import InferenceTrace, InferenceSpan
 from .cache import SemanticQueryCache
+from .user import User
 
 # This ensures all models are registered with the Base metadata
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "AuditLog",
     "InferenceTrace",
     "InferenceSpan",
-    "SemanticQueryCache"
+    "SemanticQueryCache",
+    "User",
 ]

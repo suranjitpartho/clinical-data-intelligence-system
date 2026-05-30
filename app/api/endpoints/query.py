@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from app.schemas.query import QueryRequest, _format_sse
 from app.agent.service import arun_query, arun_query_stream
 from app.agent.exceptions import ClinicalError
+from app.auth.deps import get_current_user
 
-router = APIRouter(tags=["query"])
+router = APIRouter(tags=["query"], dependencies=[Depends(get_current_user)])
 
 
 # Send a question and get the full response
