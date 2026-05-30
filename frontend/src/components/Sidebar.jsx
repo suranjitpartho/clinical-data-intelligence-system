@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PlusCircle, MessageSquare, ChevronDown, Check, BarChart3 } from 'lucide-react';
+import { PlusCircle, MessageSquare, ChevronDown, Check, BarChart3, Clock } from 'lucide-react';
 
 const Sidebar = ({
   availableModels,
@@ -11,7 +11,12 @@ const Sidebar = ({
   setModelName,
   currentView,
   setCurrentView,
-  onNewChat
+  onNewChat,
+  threads,
+  hasMore,
+  onLoadMore,
+  activeThreadId,
+  onSelectThread
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -26,42 +31,89 @@ const Sidebar = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString();
+  };
+
+  const isActive = (tid) => tid === activeThreadId && currentView === 'chat';
+
   return (
     <aside className="w-64 bg-[#0A0F1D] border-r border-white/10 flex flex-col hidden md:flex z-40">
-      <div className="p-5 flex-1">
+      <div className="p-5 flex-1 flex flex-col overflow-hidden">
         <button
           type="button"
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-[12px] font-bold transition-all mb-8 bg-clinical-blue text-slate-900 hover:bg-clinical-blue/90 cursor-pointer active:bg-clinical-blue/80"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-[12px] font-bold transition-all mb-3 bg-clinical-blue text-slate-900 hover:bg-clinical-blue/90 cursor-pointer active:bg-clinical-blue/80"
         >
           <PlusCircle size={16} /> Create New Chat
         </button>
 
-        <nav className="space-y-1">
-          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.3em] px-4 mb-4">Navigation</div>
-          
-          <div
-            onClick={() => setCurrentView('chat')}
-            className={`px-4 py-2.5 rounded-md flex items-center gap-3.5 text-[12px] font-semibold cursor-pointer transition-colors group ${currentView === 'chat'
-                ? 'bg-clinical-blue/10 text-clinical-blue border border-clinical-blue/20'
-                : 'text-gray-400 hover:bg-white/5 hover:text-gray-100'
-              }`}
-          >
-            <MessageSquare size={18} className={currentView === 'chat' ? 'text-clinical-blue' : 'text-gray-500 group-hover:text-clinical-blue/70'} />
-            <span className="truncate">Current Chat Session</span>
-          </div>
+        <div
+          onClick={() => setCurrentView('analytics')}
+          className={`px-4 py-2.5 rounded-md flex items-center gap-3.5 text-[12px] font-semibold cursor-pointer transition-colors group mb-7 ${currentView === 'analytics'
+              ? 'bg-clinical-blue/10 text-clinical-blue border border-clinical-blue/20'
+              : 'text-gray-400 hover:bg-white/5 hover:text-gray-100'
+            }`}
+        >
+          <BarChart3 size={18} className={currentView === 'analytics' ? 'text-clinical-blue' : 'text-gray-500 group-hover:text-clinical-blue/70'} />
+          <span className="truncate">Observability Dashboard</span>
+        </div>
 
-          <div
-            onClick={() => setCurrentView('analytics')}
-            className={`px-4 py-2.5 rounded-md flex items-center gap-3.5 text-[12px] font-semibold cursor-pointer transition-colors group ${currentView === 'analytics'
-                ? 'bg-clinical-blue/10 text-clinical-blue border border-clinical-blue/20'
-                : 'text-gray-400 hover:bg-white/5 hover:text-gray-100'
-              }`}
-          >
-            <BarChart3 size={18} className={currentView === 'analytics' ? 'text-clinical-blue' : 'text-gray-500 group-hover:text-clinical-blue/70'} />
-            <span className="truncate">Observability Dashboard</span>
+        {threads.length > 0 && (
+          <div className="flex-1 overflow-y-auto min-h-0 mb-4">
+            <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.3em] px-4 mb-3">
+              Conversations
+            </div>
+            <div className="space-y-0.5">
+              {threads.map((t) => (
+                <div
+                  key={t.thread_id}
+                  onClick={() => onSelectThread(t.thread_id)}
+                  className={`px-4 py-2.5 rounded-md flex items-center gap-3 text-[12px] font-medium cursor-pointer transition-colors group ${
+                    isActive(t.thread_id)
+                      ? 'bg-clinical-blue/10 text-clinical-blue border border-clinical-blue/20'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-gray-100'
+                  }`}
+                >
+                  <MessageSquare
+                    size={14}
+                    className={
+                      isActive(t.thread_id)
+                        ? 'text-clinical-blue shrink-0'
+                        : 'text-gray-500 group-hover:text-clinical-blue/70 shrink-0'
+                    }
+                  />
+                  <div className="truncate min-w-0 flex-1">
+                    <div className="truncate">{t.title}</div>
+                    <div className="flex items-center gap-1 text-[10px] text-gray-600 mt-0.5">
+                      <Clock size={10} />
+                      <span>{formatDate(t.created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {hasMore && (
+                <button
+                  onClick={onLoadMore}
+                  className="w-full text-center py-2.5 text-[11px] font-bold text-gray-500 hover:text-clinical-blue transition-colors cursor-pointer"
+                >
+                  Load more
+                </button>
+              )}
+            </div>
           </div>
-        </nav>
+        )}
       </div>
 
       <div className="p-5 border-t border-white/10 flex flex-col gap-3.5 bg-transparent">
@@ -101,8 +153,6 @@ const Sidebar = ({
         </div>
       </div>
     </aside>
-
-
   );
 };
 

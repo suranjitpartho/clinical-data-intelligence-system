@@ -1,6 +1,6 @@
 import React from 'react';
-import { Search, ChevronRight, Database, AlertTriangle } from 'lucide-react';
-const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
+import { Search, ChevronRight, Database, AlertTriangle, Terminal } from 'lucide-react';
+const TraceItem = ({ trace, isExpanded, onToggleExpand, onSqlView, isSqlOpen, selectedSql }) => {
   const isError = trace.status === 'ERROR';
 
   return (
@@ -24,7 +24,7 @@ const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
                 {new Date(trace.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
               <span className="w-1 h-1 bg-gray-700 rounded-full"></span>
-              <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">ID: {trace.id.slice(-8)}</span>
+              <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">ID: {trace.request_id ? trace.request_id.slice(-8) : '---'}</span>
               {isError && (
                 <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border"
                   style={{ color: '#F87171', borderColor: 'rgba(248, 113, 113, 0.3)', backgroundColor: 'rgba(248, 113, 113, 0.08)' }}>
@@ -62,6 +62,19 @@ const TraceItem = ({ trace, isExpanded, onToggleExpand }) => {
           <div className="flex items-center gap-3 mb-5">
             <Database size={14} className="text-gray-500" />
             <div className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em]">Logical Execution Flow</div>
+            {trace.sql_query && onSqlView && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onSqlView(trace.sql_query); }}
+                className={`ml-auto flex items-center gap-2 border px-3 py-1 rounded-md transition-all cursor-pointer shadow-sm ${
+                  isSqlOpen && selectedSql === trace.sql_query
+                    ? 'bg-clinical-blue/20 border-clinical-blue text-clinical-blue'
+                    : 'bg-white/[0.05] border-white/10 hover:bg-white/[0.08] text-gray-300'
+                }`}
+              >
+                <Terminal size={12} className={isSqlOpen && selectedSql === trace.sql_query ? 'text-clinical-blue' : 'text-gray-400'} />
+                <span className="text-[9px] font-bold uppercase tracking-wider">SQL</span>
+              </button>
+            )}
           </div>
           <div className="space-y-5">
             {trace.steps.map((step, sIdx) => (

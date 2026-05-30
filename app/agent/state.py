@@ -1,13 +1,8 @@
-import typing
 import operator
 from typing import Annotated, List, Dict, Optional
 from typing_extensions import TypedDict
-
 from langgraph.graph.message import add_messages
 
-# Python 3.9 + Pydantic 2 Compatibility Patch
-if not hasattr(typing, "_TypedDictMeta"):
-    typing.TypedDict = TypedDict
 
 class AgentState(TypedDict):
     query: Annotated[str, lambda x, y: y]
@@ -20,5 +15,8 @@ class AgentState(TypedDict):
     reference_context: Annotated[Dict, lambda x, y: y]
     final_answer: Annotated[Optional[str], lambda x, y: y]
     error_count: Annotated[int, lambda x, y: y]
+    error: Annotated[Optional[Dict], lambda x, y: y]
+    clarification_questions: Annotated[Optional[List[Dict]], lambda x, y: y]
+    clarification_answers: Annotated[Optional[List[Dict]], lambda x, y: y]
     logs: Annotated[str, operator.add]
     cache_hit: Annotated[Optional[bool], lambda x, y: y]

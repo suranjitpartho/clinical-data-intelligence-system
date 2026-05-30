@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import api, { API_BASE } from './utils/api';
+import { useAuth } from './context/AuthContext';
+import LoginPage from './components/Auth/LoginPage';
 
 // Components
 import Header from './components/Header';
@@ -8,15 +10,16 @@ import MessageList from './components/Chat/MessageList';
 import ChatInput from './components/Chat/ChatInput';
 import TraceSidebar from './components/TraceSidebar';
 import AnalyticsView from './components/Analytics';
+import ClarifyCard from './components/Chat/ClarifyCard';
 
-
-const API_BASE = window.location.port === "5173" ? "http://localhost:8000" : "";
 
 function App() {
+  const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
   const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'
   const [messages, setMessages] = useState([]);
   const [history, setHistory] = useState([]);
-  const [threadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
+  const [threadId, setThreadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
+  const [threads, setThreads] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [modelName, setModelName] = useState("Loading...");
@@ -33,21 +36,76 @@ function App() {
   const [analyticsPage, setAnalyticsPage] = useState(1);
   const [analyticsPageSize] = useState(10);
 
+  const [streamingContent, setStreamingContent] = useState("");
+  const [currentNode, setCurrentNode] = useState("");
+  const [pendingQuestions, setPendingQuestions] = useState(null);
+  const [isClarifying, setIsClarifying] = useState(false);
+  const [requestId, setRequestId] = useState(null);
+  const [threadsHasMore, setThreadsHasMore] = useState(false);
+  const streamingRef = useRef("");
+  const threadsPageRef = useRef(1);
+
   const scrollRef = useRef(null);
+
+  const fetchThreads = async (page = 1) => {
+    try {
+      const res = await api.get('/threads', {
+        params: { page, page_size: 25 }
+      });
+      const data = res.data || {};
+      if (page === 1) {
+        setThreads(data.threads || []);
+      } else {
+        setThreads(prev => [...prev, ...(data.threads || [])]);
+      }
+      setThreadsHasMore(data.has_more || false);
+      threadsPageRef.current = page;
+    } catch (error) {
+      console.error("Failed to fetch threads:", error);
+    }
+  };
+
+  const loadMoreThreads = () => {
+    fetchThreads(threadsPageRef.current + 1);
+  };
+
+  const selectThread = async (tid) => {
+    setThreadId(tid);
+    setCurrentView('chat');
+    setIsTraceOpen(false);
+    try {
+      const res = await api.get(`/threads/${tid}`);
+      const msgs = (res.data.messages || []).map(m => ({
+        role: m.role,
+        content: m.content,
+        data: m.data_results || null,
+        tool_query: m.tool_query || null,
+        nextStep: m.next_step || null,
+        isError: m.isError || m.is_error || false,
+        error_code: m.error_code || null,
+      }));
+      setMessages(msgs);
+      setHistory(res.data.messages || []);
+    } catch (error) {
+      console.error("Failed to load thread:", error);
+    }
+  };
 
   const createNewChat = () => {
     setMessages([]);
     setHistory([]);
     setIsTraceOpen(false);
     setCurrentView('chat');
+    setThreadId(`session_${Math.random().toString(36).slice(2, 11)}`);
   };
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
 
   const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
     setIsAnalyticsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/analytics`, {
+      const res = await api.get('/analytics', {
         params: { days, page, page_size: pageSize }
       });
       if (res.data && !res.data.error) {
@@ -69,7 +127,7 @@ function App() {
   const fetchOperationalAnalytics = async (days = analyticsRange) => {
     setIsAnalyticsLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/analytics/operational`, {
+      const res = await api.get('/analytics/operational', {
         params: { days }
       });
       if (res.data) {
@@ -85,17 +143,38 @@ function App() {
 
   const handleSyncAnalytics = async () => {
     setIsSyncing(true);
+    setSyncStatus("syncing");
     try {
-      await axios.post(`${API_BASE}/analytics/sync`, null, {
+      await api.post('/analytics/sync', null, {
         params: { days: analyticsRange }
       });
-      // After sync, immediately refresh local views from DB
+
+      setSyncStatus("polling");
+      let found = false;
+      for (let attempt = 1; attempt <= 12; attempt++) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const res = await api.get('/analytics', {
+            params: { days: analyticsRange, page: 1, page_size: analyticsPageSize }
+          });
+          if (res.data?.recent_traces?.length > 0) {
+            setAnalyticsData(res.data);
+            found = true;
+            setSyncStatus("complete");
+            break;
+          }
+        } catch (_) { /* retry on error */ }
+        setSyncStatus(`polling_${attempt}`);
+      }
+      if (!found) setSyncStatus("timeout");
+
       await Promise.all([
         fetchAnalytics(analyticsRange, 1, analyticsPageSize),
         fetchOperationalAnalytics(analyticsRange)
       ]);
     } catch (error) {
       console.error("Sync error:", error);
+      setSyncStatus("timeout");
       alert("Intelligence sync failed. Verify Langfuse connectivity.");
     } finally {
       setIsSyncing(false);
@@ -117,14 +196,14 @@ function App() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, streamingContent]);
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const [configRes, modelsRes] = await Promise.all([
-          axios.get(`${API_BASE}/config`),
-          axios.get(`${API_BASE}/models`)
+          api.get('/config'),
+          api.get('/models')
         ]);
 
         setAvailableModels(modelsRes.data);
@@ -139,6 +218,12 @@ function App() {
     fetchConfig();
   }, []);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchThreads();
+    }
+  }, [isAuthenticated]);
+
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -149,46 +234,226 @@ function App() {
     const originalInput = input;
     setInput("");
     setIsLoading(true);
+    streamingRef.current = "";
+    setStreamingContent("");
+    setCurrentNode("");
 
     try {
-      const response = await axios.post(`${API_BASE}/query`, {
-        query: originalInput,
-        model: selectedModel,
-        provider: selectedProvider,
-        thread_id: threadId,
-        history: history
+      const response = await fetch(`${API_BASE}/query/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({
+          query: originalInput,
+          model: selectedModel,
+          provider: selectedProvider,
+          thread_id: threadId,
+          history: history
+        })
       });
 
-      const aiResponse = {
-        role: 'ai',
-        content: response.data.final_answer,
-        data: response.data.data_results,
-        nextStep: response.data.next_step,
-        tool_query: response.data.tool_query,
-        logs: response.data.logs,
-        isError: response.data.is_error
-      };
-
-      setMessages(prev => [...prev, aiResponse]);
-      if (response.data.history) {
-        setHistory(response.data.history);
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
       }
-      await fetchAnalytics();
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split("\n");
+          let event = "";
+          let dataRaw = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataRaw = line.slice(6);
+          }
+
+          if (!dataRaw) continue;
+          const data = JSON.parse(dataRaw);
+
+          if (event === "node_start") {
+            setCurrentNode(data.node);
+          } else if (event === "token") {
+            streamingRef.current += data.content;
+            setStreamingContent(streamingRef.current);
+          } else if (event === "done") {
+            const aiResponse = {
+              role: "ai",
+              content: streamingRef.current,
+              data: data.data_results,
+              nextStep: data.next_step,
+              tool_query: data.tool_query,
+              logs: data.logs,
+              isError: data.is_error || false,
+              error_code: data.error_code || null,
+            };
+            setMessages(prev => [...prev, aiResponse]);
+            if (data.history) setHistory(data.history);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            fetchThreads();
+          } else if (event === "clarify") {
+            setPendingQuestions(data.questions);
+            setIsClarifying(true);
+            setRequestId(data.request_id || null);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            setIsLoading(false);
+            return;
+          } else if (event === "error") {
+            setMessages(prev => [...prev, {
+              role: "ai",
+              content: data.message || "An error occurred.",
+              isError: true,
+              error_code: data.code || "UNKNOWN_ERROR",
+              logs: data.logs || "",
+            }]);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+          }
+        }
+      }
     } catch (error) {
+      console.error("Stream error:", error);
       setMessages(prev => [...prev, {
-        role: 'ai',
+        role: "ai",
         content: "Error: Could not connect to the Clinical Intelligence backend.",
-        isError: true
+        isError: true,
+        error_code: "NETWORK_ERROR",
       }]);
     } finally {
       setIsLoading(false);
+      setCurrentNode("");
+    }
+  };
+
+  const handleClarifySubmit = async (answers) => {
+    setIsLoading(true);
+    try {
+      const body = {
+        thread_id: threadId,
+        answers: answers,
+        model: selectedModel,
+        provider: selectedProvider,
+      };
+      if (requestId) body.request_id = requestId;
+
+      const response = await fetch(`${API_BASE}/threads/${threadId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      streamingRef.current = "";
+      setStreamingContent("");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split("\n");
+          let event = "";
+          let dataRaw = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            else if (line.startsWith("data: ")) dataRaw = line.slice(6);
+          }
+
+          if (!dataRaw) continue;
+          const data = JSON.parse(dataRaw);
+
+          if (event === "node_start") {
+            setCurrentNode(data.node);
+          } else if (event === "token") {
+            streamingRef.current += data.content;
+            setStreamingContent(streamingRef.current);
+          } else if (event === "done") {
+            const aiResponse = {
+              role: "ai",
+              content: streamingRef.current,
+              data: data.data_results,
+              nextStep: data.next_step,
+              tool_query: data.tool_query,
+              logs: data.logs,
+              isError: data.is_error || false,
+              error_code: data.error_code || null,
+            };
+            setMessages(prev => [...prev, aiResponse]);
+            if (data.history) setHistory(data.history);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            setPendingQuestions(null);
+            setIsClarifying(false);
+            setRequestId(null);
+            fetchThreads();
+          } else if (event === "error") {
+            setMessages(prev => [...prev, {
+              role: "ai",
+              content: data.message || "An error occurred.",
+              isError: true,
+              error_code: data.code || "UNKNOWN_ERROR",
+              logs: data.logs || "",
+            }]);
+            streamingRef.current = "";
+            setStreamingContent("");
+            setCurrentNode("");
+            setPendingQuestions(null);
+            setIsClarifying(false);
+            setRequestId(null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Resume stream error:", error);
+      setMessages(prev => [...prev, {
+        role: "ai",
+        content: "Error: Could not resume the query.",
+        isError: true,
+        error_code: "NETWORK_ERROR",
+      }]);
+      setPendingQuestions(null);
+      setIsClarifying(false);
+      setRequestId(null);
+    } finally {
+      setIsLoading(false);
+      setCurrentNode("");
     }
   };
 
   const handleExport = async (sql) => {
     if (!sql) return;
     try {
-      const response = await axios.post(`${API_BASE}/export-csv`, { sql }, { responseType: 'blob' });
+      const response = await api.post('/export-csv', { sql }, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -203,9 +468,24 @@ function App() {
     }
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-dark-bg text-gray-500 text-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 border border-clinical-blue border-t-transparent rounded-full animate-spin"></div>
+          Signing in...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-dark-bg font-sans text-gray-100 overflow-hidden relative">
-      <Header />
+      <Header user={user} onLogout={logout} />
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Ambient background glows for depth */}
@@ -223,6 +503,11 @@ function App() {
           currentView={currentView}
           setCurrentView={setCurrentView}
           onNewChat={createNewChat}
+          threads={threads}
+          hasMore={threadsHasMore}
+          onLoadMore={loadMoreThreads}
+          activeThreadId={threadId}
+          onSelectThread={selectThread}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden relative bg-black/10">
@@ -233,20 +518,34 @@ function App() {
               <MessageList
                 messages={messages}
                 isLoading={isLoading}
+                streamingContent={streamingContent}
+                currentNode={currentNode}
                 scrollRef={scrollRef}
                 isTraceOpen={isTraceOpen}
                 setIsTraceOpen={setIsTraceOpen}
                 traceLogs={traceLogs}
                 setTraceLogs={setTraceLogs}
                 onExport={handleExport}
+                pendingQuestions={pendingQuestions}
               />
 
-              <ChatInput
-                input={input}
-                setInput={setInput}
-                handleSend={handleSend}
-                isLoading={isLoading}
-              />
+              {isClarifying && pendingQuestions ? (
+                <div className="w-full pt-2.5 pb-2 px-6 flex flex-col items-center bg-[#080C14]/90 backdrop-blur-2xl self-end z-20">
+                  <div className="w-full max-w-3xl">
+                    <ClarifyCard
+                      questions={pendingQuestions}
+                      onSubmit={handleClarifySubmit}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  handleSend={handleSend}
+                  isLoading={isLoading}
+                />
+              )}
             </>
           ) : (
             <AnalyticsView
@@ -256,6 +555,7 @@ function App() {
               setSubView={setAnalyticsSubView}
               isLoading={isAnalyticsLoading}
               isSyncing={isSyncing}
+              syncStatus={syncStatus}
               onSync={handleSyncAnalytics}
               onBack={() => setCurrentView('chat')}
               range={analyticsRange}

@@ -1,7 +1,9 @@
 import React from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, LogOut } from 'lucide-react';
 
-const Header = () => {
+const Header = ({ user, onLogout }) => {
+  const initials = user?.username?.slice(0, 2).toUpperCase() || "CD";
+
   return (
     <header className="w-full border-b border-white/10 bg-[#0F172A]/80 backdrop-blur-xl z-50 p-3.5 px-6 flex justify-between items-center shadow-xl">
       <div className="flex items-center gap-6">
@@ -17,16 +19,25 @@ const Header = () => {
       </div>
       <div className="flex items-center gap-6">
         <div className="text-xs text-right">
-          <div className="font-bold text-gray-100 text-[13px]">Suranjit Das</div>
+          <div className="font-bold text-gray-100 text-[13px]">{user?.username || "User"}</div>
           <div className="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">AI System Engineer</div>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center text-white text-xs font-bold shadow-[inset_0_2px_4px_rgba(255,255,255,0.05)]">
-          SD
-        </div>
+        {user?.avatar_url ? (
+          <img src={user.avatar_url} alt="" className="w-10 h-10 rounded-xl border border-white/10" />
+        ) : (
+          <div className="w-10 h-10 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center text-white text-xs font-bold shadow-[inset_0_2px_4px_rgba(255,255,255,0.05)]">
+            {initials}
+          </div>
+        )}
+        <button
+          onClick={onLogout}
+          className="text-gray-500 hover:text-gray-300 transition-colors"
+          title="Sign out"
+        >
+          <LogOut size={18} />
+        </button>
       </div>
     </header>
-
-
   );
 };
 

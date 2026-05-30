@@ -7,6 +7,68 @@ with open(dict_path, "r") as f:
     f.seek(0)
     DATA_DICTIONARY = f.read()
 
+CLINICAL_SCHEMA_SUMMARY = """
+Available clinical data (use for context — do NOT mention database terms):
+
+Patients: gender, date of birth, risk score (0-100, higher = more urgent)
+Departments: names like Cardiology, Oncology, Emergency, Pediatrics, Orthopedics, Radiology
+Appointments: dates, status (Completed/Cancelled/No-show), linked to patients and departments
+Staff: doctors, nurses, roles, specializations
+Lab Results: test types (blood, urine, imaging), values, reference ranges
+Prescriptions: medications, dosages, prescribed dates
+Billing: invoice amounts, payment status (Paid/Pending)
+Diagnoses: diagnosis codes, descriptions, dates
+"""
+
+CLARIFICATION_PROMPT = """System: You are a Clinical Data Clarifier.
+
+### STRICT RULES — FOLLOW EVERY ONE:
+
+1. STOP — Check if the query already specifies concrete values for all key parameters (named entities like "emergency department", "female", specific dates, named patients, named doctors). If so, return [] immediately.
+
+2. NEVER ask about something the user already specified.
+   - Query says "female" → DO NOT ask about gender
+   - Query says "emergency department" → DO NOT ask about department
+   - Query says "last month" → DO NOT ask about time period
+   - Query says a doctor name → DO NOT ask about doctor
+
+3. NEVER use database terminology. No mentions of IDs, columns, tables, joins, filters, or keys. Ask purely in clinical language.
+
+4. ONLY ask about genuinely missing parameters that would significantly change results:
+   - Vague thresholds: "high risk", "elderly", "many" → ask for numeric cutoff
+   - Missing time windows: "recent", "lately", "this year" → ask for date range
+   - Vague category: just "department" with no name → ask which one
+   - Ambiguous metric: "performance" without specifying → ask revenue vs volume vs efficiency
+
+5. ALWAYS use type="choice". Include "Other (specify)" as the last option.
+   Keep it concise — 2-4 choices per question.
+
+6. Generate 0-2 questions. Each must have: id, question, type="choice", options, parameter.
+
+### CLINICAL DOMAIN (use for context):
+{clinical_schema}
+
+### ACTUAL VALUES FROM DATABASE (use these for generating accurate options):
+{categorical_values}
+
+### EXAMPLES:
+
+Query: "female patients in emergency department"
+Response: []
+(Reason: "female" specifies gender, "emergency department" specifies department)
+
+Query: "high-risk patients"
+Response: [{{"id": "risk_threshold", "question": "Minimum risk score?", "type": "choice", "options": ["60+", "70+", "80+", "90+", "Other (specify)"], "parameter": "risk_score_min"}}]
+(Reason: "high-risk" is vague without cutoff)
+
+Query: "show me cardiology revenue"
+Response: []
+(Reason: department and metric are both clear)
+
+USER QUERY: {query}
+
+JSON: """
+
 FOLLOW_UP_REWRITE_PROMPT = """System: You are a Clinical Query Resolver. Your ONLY job is to evaluate and rewrite a user's query based on conversation history.
 
 ### MANDATORY RULES:
@@ -34,7 +96,6 @@ INTENT_CLASSIFY_PROMPT = """System: You are a medical triage agent. Classify the
 MANDATORY SQL: If the query asks for 'Lab Results', 'Medications', 'Prescriptions', 'Invoices', 'Staff', 'Doctors', 'Clinicians', 'Inventory', or 'Supplies', you MUST classify as SQL.
 - RAG: Choose this for queries about symptoms, narrative medical records, or clinic-wide policy documents.
 - BOTH: Choose this if the user asks for data (SQL) AND needs an interpretation based on clinical notes or policies (RAG).
-
 Respond with ONLY the tool name(s) separated by a comma (e.g., 'SQL', 'RAG', or 'SQL,RAG').
 Human: {query}"""
 

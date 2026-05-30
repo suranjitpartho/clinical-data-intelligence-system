@@ -1,8 +1,39 @@
-import { Database, Search, Brain, AlertCircle, Download } from 'lucide-react';
+import { Database, Search, Brain, AlertCircle, Download, Clock, WifiOff, XCircle } from 'lucide-react';
 import { renderMarkdown } from '../../utils/markdown-renderer';
 import DataTable from './DataTable';
+import ClarifyCard from './ClarifyCard';
 
-const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport }) => {
+const ERROR_ICONS = {
+  RATE_LIMIT: Clock,
+  SQL_EXECUTION_FAILED: Database,
+  SQL_EXTRACTION_FAILED: Database,
+  LLM_PROVIDER_ERROR: Brain,
+  NETWORK_ERROR: WifiOff,
+  INVALID_QUERY: XCircle,
+};
+
+const ERROR_COLORS = {
+  RATE_LIMIT: 'text-amber-500',
+  SQL_EXECUTION_FAILED: 'text-red-500',
+  SQL_EXTRACTION_FAILED: 'text-red-500',
+  LLM_PROVIDER_ERROR: 'text-orange-500',
+  NETWORK_ERROR: 'text-red-500',
+  INVALID_QUERY: 'text-orange-500',
+};
+
+const DEFAULT_ERROR_ICON = AlertCircle;
+
+const NODE_LABELS = {
+  rewrite: "Analyzing query...",
+  cache_check: "Checking cache...",
+  classify: "Classifying intent...",
+  sql_tool: "Querying database...",
+  rag_tool: "Searching documents...",
+  refine: "Refining results...",
+  synthesis: "Generating response...",
+};
+
+const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrollRef, isTraceOpen, setIsTraceOpen, traceLogs, setTraceLogs, onExport, pendingQuestions }) => {
   return (
     <div className="flex-1 w-full overflow-y-auto" ref={scrollRef}>
       <div className="max-w-3xl mx-auto w-full p-4 space-y-5 pb-6">
@@ -39,7 +70,20 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
                       ? 'py-3.5 px-4 rounded-md border border-red-500/40 flex gap-4 items-start bg-red-500/[0.02]'
                       : 'py-2'
                 }>
-                  {msg.isError && <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={28} strokeWidth={2} />}
+                  {msg.isError && (() => {
+                    const ErrorIcon = ERROR_ICONS[msg.error_code] || DEFAULT_ERROR_ICON;
+                    const colorClass = ERROR_COLORS[msg.error_code] || 'text-red-500';
+                    return (
+                      <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+                        <ErrorIcon className={`${colorClass}`} size={28} strokeWidth={2} />
+                        {msg.error_code && (
+                          <span className="text-[7px] font-bold uppercase tracking-wider text-red-400/60 max-w-[60px] text-center leading-tight">
+                            {msg.error_code.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="max-w-none">
                     {msg.role === 'ai' ? (
                       <div className="max-w-none">
@@ -108,7 +152,7 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
       ))}
 
 
-      {isLoading && (
+      {isLoading && !streamingContent && (
         <div className="flex justify-start animate-fade-in pl-2">
           <div className="flex gap-4 items-center text-clinical-blue/60 italic text-[13px] font-medium">
             <div className="flex gap-1.5">
@@ -116,7 +160,25 @@ const MessageList = ({ messages, isLoading, scrollRef, isTraceOpen, setIsTraceOp
               <span className="w-1.5 h-1.5 bg-clinical-blue rounded-full animate-bounce [animation-duration:1s] [animation-delay:0.2s]"></span>
               <span className="w-1.5 h-1.5 bg-clinical-blue rounded-full animate-bounce [animation-duration:1s] [animation-delay:0.4s]"></span>
             </div>
-            Clinical Engine analyzing medical database...
+            {NODE_LABELS[currentNode] || "Clinical Engine analyzing medical database..."}
+          </div>
+        </div>
+      )}
+
+      {streamingContent && (
+        <div className="flex justify-start animate-fade-in-up">
+          <div className="max-w-[85%] space-y-4">
+            <div className="py-2">
+              {currentNode && currentNode !== "synthesis" && (
+                <div className="text-[11px] text-clinical-blue/50 font-medium mb-1.5 tracking-wide">
+                  {NODE_LABELS[currentNode]}
+                </div>
+              )}
+              <div className="max-w-none">
+                {renderMarkdown(streamingContent)}
+                <span className="inline-block w-[2px] h-[1em] bg-clinical-blue ml-0.5 animate-blink-cursor align-middle"></span>
+              </div>
+            </div>
           </div>
         </div>
       )}

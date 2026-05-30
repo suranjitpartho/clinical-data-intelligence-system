@@ -49,10 +49,19 @@ The system is built on a modular, state-managed architecture designed for high a
 
 ![Python](https://img.shields.io/badge/Python-3.11+-1C96E8?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-22C982?logo=fastapi&logoColor=white) ![LangGraph](https://img.shields.io/badge/LangGraph-0.0.30-DBD51D?logo=langchain&logoColor=white) ![React](https://img.shields.io/badge/React-19.2-2572CF?logo=react&logoColor=white) ![Tailwind](https://img.shields.io/badge/Tailwind-4.2-1FD1CB?logo=tailwindcss&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-7078C4?logo=postgresql&logoColor=white)
 
+<br>
 
-<div align="center">
-  <img src="./frontend/src/assets/architecture_diagram2.png" alt="System Architecture" width="100%">
-</div>
+### System Architecture Diagram
+
+<img src="./frontend/src/assets/system-architechture.png" alt="System Architecture" width="100%">
+
+<br>
+
+### LangGraph Workflow
+
+<img src="./frontend/src/assets/langgraph-workflow.png" alt="LangGraph Workflow" width="100%">
+
+<br>
 
 <br>
 

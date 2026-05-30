@@ -17,6 +17,7 @@
   --animate-beep: beep 3s ease-in-out infinite;
   --animate-fade-in-up: fade-in-up 0.5s ease-out forwards;
   --animate-glow-pulse: glow-pulse 4s ease-in-out infinite;
+  --animate-blink-cursor: blink-cursor 0.8s step-end infinite;
 
   @keyframes beep {
     0%, 45%, 100% { opacity: 1; }
@@ -39,6 +40,12 @@
     0%, 100% { opacity: 0.2; }
     50% { opacity: 0.5; }
   }
+
+  @keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
 }
 
 @layer base {

@@ -6,6 +6,7 @@ up-to-date picture of join paths without any manual documentation.
 from functools import lru_cache
 from sqlalchemy import text
 from app.db.base import SessionLocal
+from app.agent.exceptions import SchemaError
 
 
 @lru_cache(maxsize=1)
@@ -42,6 +43,6 @@ def get_fk_relationship_map() -> str:
         lines = [f"  {r.from_table}.{r.from_column}  →  {r.to_table}.{r.to_column}" for r in rows]
         return "\n".join(lines)
     except Exception as e:
-        return f"Schema introspection failed: {e}"
+        raise SchemaError(str(e)) from e
     finally:
         session.close()
