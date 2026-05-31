@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -e
-
 # ─── Interactive Setup: API Keys ───────────────────────────────────
 # Load previously saved env vars from the persistent volume
 ENV_DIR="/app/env"
@@ -33,6 +31,7 @@ if [ ! -t 0 ] && { [ -z "$GROQ_API_KEY" ] || [ -z "$GITHUB_CLIENT_ID" ] || [ -z 
 fi
 
 if [ -t 0 ]; then
+    exec < /dev/tty
     echo ""
     echo "==========================================="
     echo "  Clinical Data Intelligence — Setup"
