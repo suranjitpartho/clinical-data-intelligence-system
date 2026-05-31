@@ -28,8 +28,6 @@ services:
       DB_NAME: clinical_db
       DB_USER: postgres
       DB_PASS: postgres
-    env_file:
-      - .env
     volumes:
       - envdata:/app/env
     depends_on:
