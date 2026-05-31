@@ -9,7 +9,11 @@ RUN npm run build
 # STAGE 2: Build the Python Backend & Serve Frontend
 FROM python:3.11-slim
 WORKDIR /app
+
 ENV PYTHONUNBUFFERED=1
+
+ARG PORT=8000
+ENV PORT=${PORT}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,7 +26,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-cache the BGE-M3 embedding model directly into the image layer
-# This prevents downloading at runtime and speeds up container startup
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
 
 # Force HuggingFace to use the baked-in local cache
@@ -34,7 +37,6 @@ COPY app/ ./app
 COPY scripts/ ./scripts
 COPY migrations/ ./migrations
 COPY alembic.ini .
-COPY .env .
 COPY entrypoint.sh .
 
 # Copy the React build from Stage 1
@@ -43,8 +45,12 @@ COPY --from=frontend-builder /frontend/dist ./static/
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
-# Expose the port
-EXPOSE 8000
+# Expose the port (HF Spaces expects 7860, configurable via build arg)
+EXPOSE ${PORT}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ[\"PORT\"]}/')"
 
 # Use the entrypoint script to handle migrations, seeding, and startup
 ENTRYPOINT ["./entrypoint.sh"]

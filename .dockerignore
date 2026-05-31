@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Git
+.git/
+.gitignore
+
+# Agent/IDE
+.agents
+.idea/
+.vscode/
+*.swp
+opencode.json
+
+# Environment
+.env
+.env.example
+
+# Logs
+*.log
+app.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scratch
+scratch/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Misc
+README.md
+LICENSE
+*.md
