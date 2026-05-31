@@ -153,24 +153,37 @@ Aggregating data (e.g., averages) often "squashes" clinical context like referen
 ### Quick Start with Docker (Recommended)
 This system is fully containerized. Deployment via Docker ensures environment consistency across both the Frontend and Backend services.
 
-> [!NOTE]
-> **Prerequisite:** Ensure your PostgreSQL instance supports the `pgvector` extension. (Standard on Supabase, Neon, and AWS RDS).
-
 **1. Clone the repository**
 ```bash
 git clone https://github.com/suranjitpartho/clinical-data-intelligence-system.git
 cd clinical-data-intelligence-system
 ```
 
-**2. Configure environment**  
-Populate .env with your API keys and DATABASE credentials
+**2. Create a GitHub OAuth app (required for login)**
 ```bash
-cp .env.example .env
+# 1. Go to https://github.com/settings/developers
+# 2. Click "New OAuth App"
+# 3. Application name: Clinical AI (or anything you like)
+# 4. Homepage URL: http://localhost:8000
+# 5. Callback URL: http://localhost:8000/api/auth/github/callback
+# 6. Click "Register application"
+# 7. Copy the Client ID
+# 8. Click "Generate a new client secret" and copy it
 ```
 
 **3. Deploy services**
 ```bash
-docker-compose up --build
+docker compose up
 ```
-Once initialized, the unified application will be accessible at **http://localhost:8000**.
+The terminal will ask you for each API key one by one — just paste them when prompted:
+- **GROQ_API_KEY** — get one free at https://console.groq.com (sign up, go to API Keys, create a key)
+- **GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET** — from the OAuth app you just created
+- **Langfuse** (optional) — press Enter to skip if you don't need analytics
+
+Once initialized, the application will be accessible at **http://localhost:8000**.
+
+> [!NOTE]
+> On the first run, Docker builds the image (installs dependencies, downloads the AI model) and seeds 500 synthetic patients. This takes 2–3 minutes. Subsequent runs are instant.
+>
+> Your API keys are saved in a Docker volume, so you only need to enter them once.
 

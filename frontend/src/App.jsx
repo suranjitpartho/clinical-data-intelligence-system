@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import api, { API_BASE } from './utils/api';
 import { useAuth } from './context/AuthContext';
+import { useConfig } from './hooks/useConfig';
+import { useThreads } from './hooks/useThreads';
+import { useChat } from './hooks/useChat';
+import { useAnalytics } from './hooks/useAnalytics';
 import LoginPage from './components/Auth/LoginPage';
-
-// Components
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import MessageList from './components/Chat/MessageList';
@@ -12,461 +13,48 @@ import TraceSidebar from './components/TraceSidebar';
 import AnalyticsView from './components/Analytics';
 import ClarifyCard from './components/Chat/ClarifyCard';
 
-
 function App() {
   const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('chat'); // 'chat' or 'analytics'
-  const [messages, setMessages] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [threadId, setThreadId] = useState(() => `session_${Math.random().toString(36).slice(2, 11)}`);
-  const [threads, setThreads] = useState([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [modelName, setModelName] = useState("Loading...");
-  const [selectedModel, setSelectedModel] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState("");
-  const [availableModels, setAvailableModels] = useState([]);
-  const [isTraceOpen, setIsTraceOpen] = useState(false);
-  const [traceLogs, setTraceLogs] = useState("");
-  const [analyticsData, setAnalyticsData] = useState(null);
-  const [operationalData, setOperationalData] = useState(null);
-  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
-  const [analyticsSubView, setAnalyticsSubView] = useState('traces'); // 'traces' or 'operational'
-  const [analyticsRange, setAnalyticsRange] = useState(7);      // days: 7, 15, 30
-  const [analyticsPage, setAnalyticsPage] = useState(1);
-  const [analyticsPageSize] = useState(10);
 
-  const [streamingContent, setStreamingContent] = useState("");
-  const [currentNode, setCurrentNode] = useState("");
-  const [pendingQuestions, setPendingQuestions] = useState(null);
-  const [isClarifying, setIsClarifying] = useState(false);
-  const [requestId, setRequestId] = useState(null);
-  const [threadsHasMore, setThreadsHasMore] = useState(false);
-  const streamingRef = useRef("");
-  const threadsPageRef = useRef(1);
+  // UI state
+  const [currentView, setCurrentView] = useState('chat');
+  const [input, setInput] = useState('');
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
+  const [traceLogs, setTraceLogs] = useState('');
+  const [analyticsSubView, setAnalyticsSubView] = useState('traces');
 
   const scrollRef = useRef(null);
 
-  const fetchThreads = async (page = 1) => {
-    try {
-      const res = await api.get('/threads', {
-        params: { page, page_size: 25 }
-      });
-      const data = res.data || {};
-      if (page === 1) {
-        setThreads(data.threads || []);
-      } else {
-        setThreads(prev => [...prev, ...(data.threads || [])]);
-      }
-      setThreadsHasMore(data.has_more || false);
-      threadsPageRef.current = page;
-    } catch (error) {
-      console.error("Failed to fetch threads:", error);
-    }
-  };
+  // Feature hooks
+  const config = useConfig();
+  const threads = useThreads(isAuthenticated);
+  const chat = useChat(config.selectedModel, config.selectedProvider);
+  const analytics = useAnalytics(currentView, analyticsSubView);
 
-  const loadMoreThreads = () => {
-    fetchThreads(threadsPageRef.current + 1);
+  // Coordination between hooks
+  const handleSend = (e) => {
+    e?.preventDefault();
+    chat.handleSend(input);
+    setInput('');
   };
 
   const selectThread = async (tid) => {
-    setThreadId(tid);
     setCurrentView('chat');
     setIsTraceOpen(false);
-    try {
-      const res = await api.get(`/threads/${tid}`);
-      const msgs = (res.data.messages || []).map(m => ({
-        role: m.role,
-        content: m.content,
-        data: m.data_results || null,
-        tool_query: m.tool_query || null,
-        nextStep: m.next_step || null,
-        isError: m.isError || m.is_error || false,
-        error_code: m.error_code || null,
-      }));
-      setMessages(msgs);
-      setHistory(res.data.messages || []);
-    } catch (error) {
-      console.error("Failed to load thread:", error);
-    }
+    await chat.loadThread(tid);
   };
 
   const createNewChat = () => {
-    setMessages([]);
-    setHistory([]);
+    chat.resetChat();
     setIsTraceOpen(false);
     setCurrentView('chat');
-    setThreadId(`session_${Math.random().toString(36).slice(2, 11)}`);
   };
-
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(null);
-
-  const fetchAnalytics = async (days = analyticsRange, page = analyticsPage, pageSize = analyticsPageSize) => {
-    setIsAnalyticsLoading(true);
-    try {
-      const res = await api.get('/analytics', {
-        params: { days, page, page_size: pageSize }
-      });
-      if (res.data && !res.data.error) {
-        setAnalyticsData(prev => {
-          const isPaginating = page > 1;
-          return {
-            ...res.data,
-            summary: (isPaginating && prev?.summary) ? prev.summary : res.data.summary
-          };
-        });
-      }
-    } catch (error) {
-      console.error("Analytics fetch error:", error);
-    } finally {
-      setIsAnalyticsLoading(false);
-    }
-  };
-
-  const fetchOperationalAnalytics = async (days = analyticsRange) => {
-    setIsAnalyticsLoading(true);
-    try {
-      const res = await api.get('/analytics/operational', {
-        params: { days }
-      });
-      if (res.data) {
-        setOperationalData(res.data);
-      }
-    } catch (error) {
-      console.error("Operational analytics fetch error:", error);
-      setOperationalData({ error: error.message });
-    } finally {
-      setIsAnalyticsLoading(false);
-    }
-  };
-
-  const handleSyncAnalytics = async () => {
-    setIsSyncing(true);
-    setSyncStatus("syncing");
-    try {
-      await api.post('/analytics/sync', null, {
-        params: { days: analyticsRange }
-      });
-
-      setSyncStatus("polling");
-      let found = false;
-      for (let attempt = 1; attempt <= 12; attempt++) {
-        await new Promise(r => setTimeout(r, 3000));
-        try {
-          const res = await api.get('/analytics', {
-            params: { days: analyticsRange, page: 1, page_size: analyticsPageSize }
-          });
-          if (res.data?.recent_traces?.length > 0) {
-            setAnalyticsData(res.data);
-            found = true;
-            setSyncStatus("complete");
-            break;
-          }
-        } catch (_) { /* retry on error */ }
-        setSyncStatus(`polling_${attempt}`);
-      }
-      if (!found) setSyncStatus("timeout");
-
-      await Promise.all([
-        fetchAnalytics(analyticsRange, 1, analyticsPageSize),
-        fetchOperationalAnalytics(analyticsRange)
-      ]);
-    } catch (error) {
-      console.error("Sync error:", error);
-      setSyncStatus("timeout");
-      alert("Intelligence sync failed. Verify Langfuse connectivity.");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Refetch when range or page changes
-  useEffect(() => {
-    if (currentView === 'analytics') {
-      if (analyticsSubView === 'traces') {
-        fetchAnalytics(analyticsRange, analyticsPage, analyticsPageSize);
-      } else {
-        fetchOperationalAnalytics(analyticsRange);
-      }
-    }
-  }, [currentView, analyticsRange, analyticsPage, analyticsSubView]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading, streamingContent]);
-
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const [configRes, modelsRes] = await Promise.all([
-          api.get('/config'),
-          api.get('/models')
-        ]);
-
-        setAvailableModels(modelsRes.data);
-        const currentModel = modelsRes.data.find(m => m.id === configRes.data.model_name);
-        setModelName(currentModel ? currentModel.name : configRes.data.model_name);
-        setSelectedModel(configRes.data.model_name);
-        setSelectedProvider(configRes.data.provider);
-      } catch (error) {
-        console.error("Fetch error:", error);
-      }
-    };
-    fetchConfig();
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchThreads();
-    }
-  }, [isAuthenticated]);
-
-  const handleSend = async (e) => {
-    if (e) e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const userMessage = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
-
-    const originalInput = input;
-    setInput("");
-    setIsLoading(true);
-    streamingRef.current = "";
-    setStreamingContent("");
-    setCurrentNode("");
-
-    try {
-      const response = await fetch(`${API_BASE}/query/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({
-          query: originalInput,
-          model: selectedModel,
-          provider: selectedProvider,
-          thread_id: threadId,
-          history: history
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          if (!part.trim()) continue;
-
-          const lines = part.split("\n");
-          let event = "";
-          let dataRaw = "";
-
-          for (const line of lines) {
-            if (line.startsWith("event: ")) event = line.slice(7).trim();
-            else if (line.startsWith("data: ")) dataRaw = line.slice(6);
-          }
-
-          if (!dataRaw) continue;
-          const data = JSON.parse(dataRaw);
-
-          if (event === "node_start") {
-            setCurrentNode(data.node);
-          } else if (event === "token") {
-            streamingRef.current += data.content;
-            setStreamingContent(streamingRef.current);
-          } else if (event === "done") {
-            const aiResponse = {
-              role: "ai",
-              content: streamingRef.current,
-              data: data.data_results,
-              nextStep: data.next_step,
-              tool_query: data.tool_query,
-              logs: data.logs,
-              isError: data.is_error || false,
-              error_code: data.error_code || null,
-            };
-            setMessages(prev => [...prev, aiResponse]);
-            if (data.history) setHistory(data.history);
-            streamingRef.current = "";
-            setStreamingContent("");
-            setCurrentNode("");
-            fetchThreads();
-          } else if (event === "clarify") {
-            setPendingQuestions(data.questions);
-            setIsClarifying(true);
-            setRequestId(data.request_id || null);
-            streamingRef.current = "";
-            setStreamingContent("");
-            setCurrentNode("");
-            setIsLoading(false);
-            return;
-          } else if (event === "error") {
-            setMessages(prev => [...prev, {
-              role: "ai",
-              content: data.message || "An error occurred.",
-              isError: true,
-              error_code: data.code || "UNKNOWN_ERROR",
-              logs: data.logs || "",
-            }]);
-            streamingRef.current = "";
-            setStreamingContent("");
-            setCurrentNode("");
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Stream error:", error);
-      setMessages(prev => [...prev, {
-        role: "ai",
-        content: "Error: Could not connect to the Clinical Intelligence backend.",
-        isError: true,
-        error_code: "NETWORK_ERROR",
-      }]);
-    } finally {
-      setIsLoading(false);
-      setCurrentNode("");
-    }
-  };
-
-  const handleClarifySubmit = async (answers) => {
-    setIsLoading(true);
-    try {
-      const body = {
-        thread_id: threadId,
-        answers: answers,
-        model: selectedModel,
-        provider: selectedProvider,
-      };
-      if (requestId) body.request_id = requestId;
-
-      const response = await fetch(`${API_BASE}/threads/${threadId}/resume`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      streamingRef.current = "";
-      setStreamingContent("");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          if (!part.trim()) continue;
-
-          const lines = part.split("\n");
-          let event = "";
-          let dataRaw = "";
-
-          for (const line of lines) {
-            if (line.startsWith("event: ")) event = line.slice(7).trim();
-            else if (line.startsWith("data: ")) dataRaw = line.slice(6);
-          }
-
-          if (!dataRaw) continue;
-          const data = JSON.parse(dataRaw);
-
-          if (event === "node_start") {
-            setCurrentNode(data.node);
-          } else if (event === "token") {
-            streamingRef.current += data.content;
-            setStreamingContent(streamingRef.current);
-          } else if (event === "done") {
-            const aiResponse = {
-              role: "ai",
-              content: streamingRef.current,
-              data: data.data_results,
-              nextStep: data.next_step,
-              tool_query: data.tool_query,
-              logs: data.logs,
-              isError: data.is_error || false,
-              error_code: data.error_code || null,
-            };
-            setMessages(prev => [...prev, aiResponse]);
-            if (data.history) setHistory(data.history);
-            streamingRef.current = "";
-            setStreamingContent("");
-            setCurrentNode("");
-            setPendingQuestions(null);
-            setIsClarifying(false);
-            setRequestId(null);
-            fetchThreads();
-          } else if (event === "error") {
-            setMessages(prev => [...prev, {
-              role: "ai",
-              content: data.message || "An error occurred.",
-              isError: true,
-              error_code: data.code || "UNKNOWN_ERROR",
-              logs: data.logs || "",
-            }]);
-            streamingRef.current = "";
-            setStreamingContent("");
-            setCurrentNode("");
-            setPendingQuestions(null);
-            setIsClarifying(false);
-            setRequestId(null);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Resume stream error:", error);
-      setMessages(prev => [...prev, {
-        role: "ai",
-        content: "Error: Could not resume the query.",
-        isError: true,
-        error_code: "NETWORK_ERROR",
-      }]);
-      setPendingQuestions(null);
-      setIsClarifying(false);
-      setRequestId(null);
-    } finally {
-      setIsLoading(false);
-      setCurrentNode("");
-    }
-  };
-
-  const handleExport = async (sql) => {
-    if (!sql) return;
-    try {
-      const response = await api.post('/export-csv', { sql }, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `clinical_export_${new Date().getTime()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Export failed:", error);
-      alert("Failed to export CSV. Please try again.");
-    }
-  };
+  }, [chat.messages, chat.isLoading, chat.streamingContent]);
 
   if (isAuthLoading) {
     return (
@@ -488,53 +76,51 @@ function App() {
       <Header user={user} onLogout={logout} />
 
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Ambient background glows for depth */}
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-clinical-blue/10 rounded-full blur-[140px] pointer-events-none animate-glow-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-clinical-blue/5 rounded-full blur-[120px] pointer-events-none"></div>
 
         <Sidebar
-          availableModels={availableModels}
-          selectedModel={selectedModel}
-          selectedProvider={selectedProvider}
-          setSelectedModel={setSelectedModel}
-          setSelectedProvider={setSelectedProvider}
-          modelName={modelName}
-          setModelName={setModelName}
+          availableModels={config.availableModels}
+          selectedModel={config.selectedModel}
+          selectedProvider={config.selectedProvider}
+          setSelectedModel={config.setSelectedModel}
+          setSelectedProvider={config.setSelectedProvider}
+          modelName={config.modelName}
+          setModelName={config.setModelName}
           currentView={currentView}
           setCurrentView={setCurrentView}
           onNewChat={createNewChat}
-          threads={threads}
-          hasMore={threadsHasMore}
-          onLoadMore={loadMoreThreads}
-          activeThreadId={threadId}
+          threads={threads.threads}
+          hasMore={threads.threadsHasMore}
+          currentPage={threads.currentPage}
+          onPageChange={threads.goToPage}
+          activeThreadId={chat.threadId}
           onSelectThread={selectThread}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden relative bg-black/10">
           {currentView === 'chat' ? (
-
-
             <>
               <MessageList
-                messages={messages}
-                isLoading={isLoading}
-                streamingContent={streamingContent}
-                currentNode={currentNode}
+                messages={chat.messages}
+                isLoading={chat.isLoading}
+                streamingContent={chat.streamingContent}
+                currentNode={chat.currentNode}
                 scrollRef={scrollRef}
                 isTraceOpen={isTraceOpen}
                 setIsTraceOpen={setIsTraceOpen}
                 traceLogs={traceLogs}
                 setTraceLogs={setTraceLogs}
-                onExport={handleExport}
-                pendingQuestions={pendingQuestions}
+                onExport={chat.handleExport}
+                pendingQuestions={chat.pendingQuestions}
               />
 
-              {isClarifying && pendingQuestions ? (
+              {chat.isClarifying && chat.pendingQuestions ? (
                 <div className="w-full pt-2.5 pb-2 px-6 flex flex-col items-center bg-[#080C14]/90 backdrop-blur-2xl self-end z-20">
                   <div className="w-full max-w-3xl">
                     <ClarifyCard
-                      questions={pendingQuestions}
-                      onSubmit={handleClarifySubmit}
+                      questions={chat.pendingQuestions}
+                      onSubmit={chat.handleClarifySubmit}
                     />
                   </div>
                 </div>
@@ -543,26 +129,26 @@ function App() {
                   input={input}
                   setInput={setInput}
                   handleSend={handleSend}
-                  isLoading={isLoading}
+                  isLoading={chat.isLoading}
                 />
               )}
             </>
           ) : (
             <AnalyticsView
-              metrics={analyticsData}
-              operationalData={operationalData}
+              metrics={analytics.analyticsData}
+              operationalData={analytics.operationalData}
               subView={analyticsSubView}
               setSubView={setAnalyticsSubView}
-              isLoading={isAnalyticsLoading}
-              isSyncing={isSyncing}
-              syncStatus={syncStatus}
-              onSync={handleSyncAnalytics}
+              isLoading={analytics.isAnalyticsLoading}
+              isSyncing={analytics.isSyncing}
+              syncStatus={analytics.syncStatus}
+              onSync={analytics.handleSyncAnalytics}
               onBack={() => setCurrentView('chat')}
-              range={analyticsRange}
-              onRangeChange={(days) => { setAnalyticsRange(days); setAnalyticsPage(1); }}
-              currentPage={analyticsPage}
-              onPageChange={setAnalyticsPage}
-              pageSize={analyticsPageSize}
+              range={analytics.analyticsRange}
+              onRangeChange={analytics.handleRangeChange}
+              currentPage={analytics.analyticsPage}
+              onPageChange={analytics.setAnalyticsPage}
+              pageSize={analytics.analyticsPageSize}
             />
           )}
         </main>

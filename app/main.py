@@ -18,6 +18,7 @@ from app.api.endpoints.config import router as config_router
 from app.api.endpoints.analytics import router as analytics_router
 from app.api.endpoints.export import router as export_router
 from app.api.endpoints.auth import router as auth_router
+from app.api.endpoints.embedding import router as embedding_router
 from app.agent.exceptions import ClinicalError
 
 
@@ -54,6 +55,7 @@ app.include_router(config_router)
 app.include_router(analytics_router)
 app.include_router(export_router)
 app.include_router(auth_router, prefix="/api")
+app.include_router(embedding_router, prefix="/api")
 
 static_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 if os.path.exists(static_path):
@@ -69,4 +71,5 @@ async def serve_react_app(full_path: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

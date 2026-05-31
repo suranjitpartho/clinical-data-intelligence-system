@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Send } from 'lucide-react';
+import EmbeddingStatus from './EmbeddingStatus';
 
 const ChatInput = ({ input, setInput, handleSend, isLoading }) => {
   const textareaRef = useRef(null);
@@ -49,7 +50,7 @@ const ChatInput = ({ input, setInput, handleSend, isLoading }) => {
           <p className="flex items-center gap-2">
             AI can make mistakes. Verify critical medical data.
           </p>
-          <span className="opacity-40 font-medium">Build v1.2.5 Stable</span>
+          <EmbeddingStatus />
         </div>
       </div>
     </div>

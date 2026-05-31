@@ -107,8 +107,12 @@ const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrol
               {msg.nextStep && (
                 <div className="flex items-center flex-wrap gap-4 mt-3">
                   <div className="flex items-center gap-2 bg-white/[0.03] px-3 py-1 rounded-md border border-white/5">
-                    {msg.nextStep === 'SQL' ? <Database size={12} className="text-gray-500" /> : <Search size={12} className="text-gray-500" />}
-                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500">{msg.nextStep} Output</span>
+                    {(msg.nextStep === 'SQL' || msg.nextStep === 'SQL, RAG' || (Array.isArray(msg.nextStep) && msg.nextStep.includes('SQL')))
+                      ? <Database size={12} className="text-gray-500" />
+                      : <Search size={12} className="text-gray-500" />}
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-gray-500">
+                      Tool: {Array.isArray(msg.nextStep) ? msg.nextStep.join(', ') : msg.nextStep}
+                    </span>
                   </div>
                   
                   {msg.logs && (
@@ -129,7 +133,7 @@ const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrol
                     >
                       <Brain size={12} className={isTraceOpen && traceLogs === msg.logs ? 'text-clinical-blue' : 'text-gray-400'} />
                       <span className="text-[9px] font-bold uppercase tracking-wider">
-                        Reasoning Trace
+                        Reasoning
                       </span>
                     </button>
                   )}
@@ -141,7 +145,7 @@ const MessageList = ({ messages, isLoading, streamingContent, currentNode, scrol
                     >
                       <Download size={12} className="text-gray-400" />
                       <span className="text-[9px] font-bold uppercase tracking-wider">
-                        Export Full CSV
+                        Export
                       </span>
                     </button>
                   )}

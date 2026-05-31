@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Activity, Clock, Zap, BarChart3, List, LayoutDashboard } from 'lucide-react';
 import StatCard from './StatCard';
 import TraceItem from './TraceItem';
 import Pagination from './Pagination';
 import OperationalView from './OperationalView';
 import SqlSidebar from '../SqlSidebar';
+import { aggregateByRequestId, groupBySession } from '../../utils/analytics-utils';
 
 const RANGE_OPTIONS = [
   { label: '7D', value: 7 },
@@ -46,120 +47,8 @@ const AnalyticsView = ({
   const traces = metrics?.recent_traces || [];
   const pagination = metrics?.pagination || { current_page: 1, total_pages: 1, total_items: 0, page_size: pageSize };
 
-  function parseLatency(s) {
-    if (typeof s === 'string') return parseFloat(s.replace('s', ''));
-    return s || 0;
-  }
-  function formatLatency(n) {
-    return n.toFixed(2) + 's';
-  }
-  function mergeSteps(allSteps) {
-    const result = [];
-    for (const step of allSteps) {
-      const last = result[result.length - 1];
-      if (last && last.name === step.name) {
-        last.latency = formatLatency(parseLatency(last.latency) + parseLatency(step.latency));
-        last.tokens = (last.tokens || 0) + (step.tokens || 0);
-        last.cost = (last.cost || 0) + (step.cost || 0);
-      } else {
-        result.push({ ...step });
-      }
-    }
-    return result;
-  }
-
-  // Step 1: Aggregate raw traces by request_id
-  const reqMap = new Map();
-  for (const t of traces) {
-    const rid = t.request_id;
-    if (!rid) {
-      continue;
-    }
-    if (!reqMap.has(rid)) {
-      reqMap.set(rid, []);
-    }
-    reqMap.get(rid).push(t);
-  }
-  const aggregated = [];
-  for (const [rid, group] of reqMap) {
-    group.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    const steps = mergeSteps(group.flatMap(t => t.steps || []));
-    aggregated.push({
-      request_id: rid,
-      session_id: group[0].session_id,
-      input: group[0].input,
-      output: group[group.length - 1].output,
-      total_latency: formatLatency(group.reduce((s, t) => s + parseLatency(t.total_latency), 0)),
-      total_tokens: group.reduce((s, t) => s + (t.total_tokens || 0), 0),
-      total_cost: group.reduce((s, t) => s + (t.total_cost || 0), 0),
-      status: group.some(t => t.status === 'ERROR') ? 'ERROR' : 'SUCCESS',
-      error_message: group.find(t => t.error_message)?.error_message || null,
-      sql_query: group.find(t => t.sql_query)?.sql_query || null,
-      timestamp: group[0].timestamp,
-      steps,
-    });
-  }
-  // Traces without request_id added individually
-  for (const t of traces) {
-    if (!t.request_id) {
-      aggregated.push({
-        request_id: null,
-        session_id: t.session_id,
-        input: t.input,
-        output: t.output,
-        total_latency: t.total_latency,
-        total_tokens: t.total_tokens || 0,
-        total_cost: t.total_cost || 0,
-        status: t.status,
-        error_message: t.error_message,
-        sql_query: t.sql_query,
-        timestamp: t.timestamp,
-        steps: t.steps || [],
-      });
-    }
-  }
-
-  // Step 2: Group aggregated items by session_id
-  const sessionMap = new Map();
-  for (const item of aggregated) {
-    const sid = item.session_id;
-    if (!sid) continue;
-    if (!sessionMap.has(sid)) {
-      sessionMap.set(sid, { session_id: sid, items: [], totalTokens: 0, totalCost: 0 });
-    }
-    const g = sessionMap.get(sid);
-    g.items.push(item);
-    g.totalTokens += (item.total_tokens || 0);
-    g.totalCost += (item.total_cost || 0);
-  }
-
-  // Step 3: Build final display list
-  const groupedTraces = [];
-  for (const item of aggregated) {
-    if (!item.session_id) {
-      groupedTraces.push({ isGroup: false, request_id: item.request_id, trace: item });
-    }
-  }
-  for (const g of sessionMap.values()) {
-    if (g.items.length >= 2) {
-      groupedTraces.push({
-        isGroup: true,
-        id: g.session_id,
-        session_id: g.session_id,
-        items: g.items,
-        totalTokens: g.totalTokens,
-        totalCost: g.totalCost,
-      });
-    } else {
-      const item = g.items[0];
-      groupedTraces.push({ isGroup: false, request_id: item.request_id, trace: item });
-    }
-  }
-  groupedTraces.sort((a, b) => {
-    const ta = a.isGroup ? a.items[0].timestamp : a.trace.timestamp;
-    const tb = b.isGroup ? b.items[0].timestamp : b.trace.timestamp;
-    return new Date(tb) - new Date(ta);
-  });
+  const aggregated = useMemo(() => aggregateByRequestId(traces), [traces]);
+  const groupedTraces = useMemo(() => groupBySession(aggregated), [aggregated]);
 
   return (
     <div className="flex bg-dark-bg font-sans custom-scrollbar relative h-full">
