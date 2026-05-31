@@ -4,6 +4,10 @@ import sys
 ENV_FILE = "/app/env/.env"
 
 
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, flush=True, **kwargs)
+
+
 def load_env():
     env = {}
     if os.path.exists(ENV_FILE):
@@ -27,30 +31,34 @@ def prompt_required(var_name, instructions, hint=""):
     existing = os.environ.get(var_name, "") or ""
     if existing.strip():
         return existing.strip()
-    print(f"\n{'=' * 40}", flush=True)
-    print(f"STEP: {var_name} (required)", flush=True)
-    print(f"{'=' * 40}", flush=True)
-    print(f"{instructions}\n", flush=True)
+    eprint("")
+    eprint("=" * 40)
+    eprint(f"STEP: {var_name} (required)")
+    eprint("=" * 40)
+    eprint(instructions)
+    eprint("")
     suffix = f" ({hint})" if hint else ""
     while True:
         try:
             val = input(f"Paste your {var_name}{suffix}: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\nSetup cancelled.", flush=True)
+            eprint("\nSetup cancelled.")
             sys.exit(1)
         if val:
             return val
-        print(f"{var_name} is required.", flush=True)
+        eprint(f"{var_name} is required.")
 
 
 def prompt_optional(var_name, instructions):
     existing = os.environ.get(var_name, "") or ""
     if existing.strip():
         return existing.strip()
-    print(f"\n{'=' * 40}", flush=True)
-    print(f"STEP: {var_name} (optional)", flush=True)
-    print(f"{'=' * 40}", flush=True)
-    print(f"{instructions}\n", flush=True)
+    eprint("")
+    eprint("=" * 40)
+    eprint(f"STEP: {var_name} (optional)")
+    eprint("=" * 40)
+    eprint(instructions)
+    eprint("")
     try:
         val = input(f"Paste your {var_name} (or press Enter to skip): ").strip()
     except (EOFError, KeyboardInterrupt):
@@ -59,16 +67,15 @@ def prompt_optional(var_name, instructions):
 
 
 def main():
-    print("", flush=True)
-    print("===========================================", flush=True)
-    print("  Clinical Data Intelligence — Setup", flush=True)
-    print("===========================================", flush=True)
-    print("", flush=True)
+    eprint("")
+    eprint("=" * 50)
+    eprint("  Clinical Data Intelligence — Setup")
+    eprint("=" * 50)
+    eprint("")
 
     existing = load_env()
     exports = []
 
-    # Apply any env vars already set from Docker/volume
     for k, v in existing.items():
         if v and k not in os.environ:
             exports.append(f"export {k}='{v}'")
@@ -154,7 +161,7 @@ def main():
             save_env(existing, "JWT_SECRET", jwt)
         os.environ["JWT_SECRET"] = jwt
         exports.append(f"export JWT_SECRET='{jwt}'")
-        print("  JWT_SECRET auto-generated.", flush=True)
+        eprint("  JWT_SECRET auto-generated.")
 
     # ── Defaults ──
     for key, default in [
@@ -171,14 +178,14 @@ def main():
         os.environ[key] = val
         exports.append(f"export {key}='{val}'")
 
-    print("", flush=True)
-    print("===========================================", flush=True)
-    print("  Setup complete! Starting server...", flush=True)
-    print("===========================================", flush=True)
-    print("", flush=True)
+    eprint("")
+    eprint("=" * 50)
+    eprint("  Setup complete! Starting server...")
+    eprint("=" * 50)
+    eprint("")
 
-    # Print exports for the shell to eval
-    print("\n".join(exports), flush=True)
+    # Only exports go to stdout for the shell to eval
+    print("\n".join(exports))
 
 
 if __name__ == "__main__":
