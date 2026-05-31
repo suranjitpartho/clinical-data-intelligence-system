@@ -8,6 +8,14 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, flush=True, **kwargs)
 
 
+def uinput(prompt=""):
+    """Write prompt to stderr so it's visible, not captured by $()."""
+    if prompt:
+        sys.stderr.write(prompt)
+        sys.stderr.flush()
+    return input()
+
+
 def load_env():
     env = {}
     if os.path.exists(ENV_FILE):
@@ -40,7 +48,7 @@ def prompt_required(var_name, instructions, hint=""):
     suffix = f" ({hint})" if hint else ""
     while True:
         try:
-            val = input(f"Paste your {var_name}{suffix}: ").strip()
+            val = uinput(f"Paste your {var_name}{suffix}: ").strip()
         except (EOFError, KeyboardInterrupt):
             eprint("\nSetup cancelled.")
             sys.exit(1)
@@ -60,7 +68,7 @@ def prompt_optional(var_name, instructions):
     eprint(instructions)
     eprint("")
     try:
-        val = input(f"Paste your {var_name} (or press Enter to skip): ").strip()
+        val = uinput(f"Paste your {var_name} (or press Enter to skip): ").strip()
     except (EOFError, KeyboardInterrupt):
         val = ""
     return val
