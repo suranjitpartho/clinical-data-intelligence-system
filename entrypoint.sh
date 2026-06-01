@@ -1,18 +1,23 @@
 #!/bin/sh
-set -e
-
-# ─── Validate required env vars ────────────────────────────────────
-if [ -z "$GROQ_API_KEY" ] || [ -z "$GITHUB_CLIENT_ID" ] || [ -z "$GITHUB_CLIENT_SECRET" ]; then
-    echo "ERROR: Missing required environment variables."
-    echo ""
-    echo "  Create a .env file from .env.example and fill in your keys:"
-    echo "    cp .env.example .env"
-    echo "    # then edit .env with your GROQ_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET"
-    echo "    docker compose up"
-    exit 1
-fi
 
 APP_PORT="${PORT:-8000}"
+
+# ─── Validate required env vars ────────────────────────────────────
+if [ -z "$GROQ_API_KEY" ]; then
+    echo "ERROR: GROQ_API_KEY is not set."
+    echo "  Create .env from .env.example with your keys: cp .env.example .env"
+    exit 1
+fi
+if [ -z "$GITHUB_CLIENT_ID" ]; then
+    echo "ERROR: GITHUB_CLIENT_ID is not set."
+    echo "  Create .env from .env.example with your keys: cp .env.example .env"
+    exit 1
+fi
+if [ -z "$GITHUB_CLIENT_SECRET" ]; then
+    echo "ERROR: GITHUB_CLIENT_SECRET is not set."
+    echo "  Create .env from .env.example with your keys: cp .env.example .env"
+    exit 1
+fi
 
 echo "--- 🚀 Starting Clinical AI System Initialization ---"
 
@@ -20,7 +25,6 @@ echo "--- 🚀 Starting Clinical AI System Initialization ---"
 echo "--- 🗄️  Checking Database Connection ---"
 python -c "
 import os, time, psycopg2
-from urllib.parse import quote_plus
 
 for attempt in range(30):
     try:
@@ -60,5 +64,5 @@ echo "--- Embedding process running in background (PID: ${EMBEDDING_PID}) ---"
 
 echo "--- ✅ System Initialized. Starting FastAPI Server on port ${APP_PORT} ---"
 
-# 5. Start the application
+# 4. Start the application
 exec uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT}"
