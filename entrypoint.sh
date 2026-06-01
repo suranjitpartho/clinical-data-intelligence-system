@@ -1,28 +1,15 @@
 #!/bin/sh
+set -e
 
-# ─── Interactive Setup: API Keys ───────────────────────────────────
-# Load previously saved env vars from the persistent volume
-ENV_DIR="/app/env"
-ENV_FILE="$ENV_DIR/.env"
-mkdir -p "$ENV_DIR"
-touch "$ENV_FILE"
-if [ -f "$ENV_FILE" ]; then
-    . "$ENV_FILE"
-fi
-
-# Non-interactive mode: fail if required vars are missing
-if [ ! -t 0 ] && { [ -z "$GROQ_API_KEY" ] || [ -z "$GITHUB_CLIENT_ID" ] || [ -z "$GITHUB_CLIENT_SECRET" ]; }; then
-    echo "ERROR: Running in non-interactive mode but required env vars are missing."
+# ─── Validate required env vars ────────────────────────────────────
+if [ -z "$GROQ_API_KEY" ] || [ -z "$GITHUB_CLIENT_ID" ] || [ -z "$GITHUB_CLIENT_SECRET" ]; then
+    echo "ERROR: Missing required environment variables."
     echo ""
-    echo "  First time? Run interactively:     docker compose up"
-    echo "  Already configured? Run detached:  docker compose up -d"
+    echo "  Create a .env file from .env.example and fill in your keys:"
+    echo "    cp .env.example .env"
+    echo "    # then edit .env with your GROQ_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET"
+    echo "    docker compose up"
     exit 1
-fi
-
-# Interactive mode: use Python (handles TTY input more reliably than shell read)
-if [ -t 0 ]; then
-    python scripts/setup_prompt.py
-    . "$ENV_FILE"
 fi
 
 APP_PORT="${PORT:-8000}"

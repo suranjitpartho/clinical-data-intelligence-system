@@ -8,7 +8,7 @@ from app.db.base import SessionLocal
 from app.models.clinical import ClinicalNote
 from tqdm import tqdm
 
-STATUS_FILE = "/app/env/embedding_status.json"
+STATUS_FILE = "/tmp/embedding_status.json"
 
 def write_status(status, done=0, total=0):
     try:

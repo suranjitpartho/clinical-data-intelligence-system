@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 router = APIRouter(prefix="/embedding", tags=["embedding"])
 
-STATUS_FILE = "/app/env/embedding_status.json"
+STATUS_FILE = "/tmp/embedding_status.json"
 
 
 @router.get("/status")
