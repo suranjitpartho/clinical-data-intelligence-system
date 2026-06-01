@@ -32,7 +32,7 @@ def save_env(existing, key, value):
     existing[key] = value
     with open(ENV_FILE, "w") as f:
         for k, v in existing.items():
-            f.write(f"{k}={v}\n")
+            f.write(f"export {k}={v}\n")
 
 
 def prompt_required(var_name, instructions, hint=""):
@@ -82,11 +82,6 @@ def main():
     eprint("")
 
     existing = load_env()
-    exports = []
-
-    for k, v in existing.items():
-        if v and k not in os.environ:
-            exports.append(f"export {k}='{v}'")
 
     # ── GROQ_API_KEY ──
     val = prompt_required(
@@ -100,10 +95,7 @@ def main():
         "  5. Copy the key (it starts with 'gsk_')",
         hint="gsk_..."
     )
-    if val != existing.get("GROQ_API_KEY"):
-        save_env(existing, "GROQ_API_KEY", val)
-    os.environ["GROQ_API_KEY"] = val
-    exports.append(f"export GROQ_API_KEY='{val}'")
+    save_env(existing, "GROQ_API_KEY", val)
 
     # ── GITHUB_CLIENT_ID ──
     val = prompt_required(
@@ -118,10 +110,7 @@ def main():
         "  6. Click 'Register application'\n"
         "  7. Copy the Client ID from the next page"
     )
-    if val != existing.get("GITHUB_CLIENT_ID"):
-        save_env(existing, "GITHUB_CLIENT_ID", val)
-    os.environ["GITHUB_CLIENT_ID"] = val
-    exports.append(f"export GITHUB_CLIENT_ID='{val}'")
+    save_env(existing, "GITHUB_CLIENT_ID", val)
 
     # ── GITHUB_CLIENT_SECRET ──
     val = prompt_required(
@@ -130,10 +119,7 @@ def main():
         "  1. On the same page, click 'Generate a new client secret'\n"
         "  2. Copy the secret key shown"
     )
-    if val != existing.get("GITHUB_CLIENT_SECRET"):
-        save_env(existing, "GITHUB_CLIENT_SECRET", val)
-    os.environ["GITHUB_CLIENT_SECRET"] = val
-    exports.append(f"export GITHUB_CLIENT_SECRET='{val}'")
+    save_env(existing, "GITHUB_CLIENT_SECRET", val)
 
     # ── LANGFUSE (optional) ──
     secret = prompt_optional(
@@ -147,28 +133,18 @@ def main():
         "    4. Go to Project Settings -> API Keys"
     )
     if secret:
-        if secret != existing.get("LANGFUSE_SECRET_KEY"):
-            save_env(existing, "LANGFUSE_SECRET_KEY", secret)
-        os.environ["LANGFUSE_SECRET_KEY"] = secret
-        exports.append(f"export LANGFUSE_SECRET_KEY='{secret}'")
-
+        save_env(existing, "LANGFUSE_SECRET_KEY", secret)
         public = prompt_required(
             "LANGFUSE_PUBLIC_KEY",
             "Copy the Public Key from the same Langfuse page."
         )
-        if public != existing.get("LANGFUSE_PUBLIC_KEY"):
-            save_env(existing, "LANGFUSE_PUBLIC_KEY", public)
-        os.environ["LANGFUSE_PUBLIC_KEY"] = public
-        exports.append(f"export LANGFUSE_PUBLIC_KEY='{public}'")
+        save_env(existing, "LANGFUSE_PUBLIC_KEY", public)
 
     # ── JWT_SECRET (auto-generate) ──
-    if not os.environ.get("JWT_SECRET"):
+    if not existing.get("JWT_SECRET"):
         import secrets
         jwt = secrets.token_urlsafe(32)
-        if jwt != existing.get("JWT_SECRET"):
-            save_env(existing, "JWT_SECRET", jwt)
-        os.environ["JWT_SECRET"] = jwt
-        exports.append(f"export JWT_SECRET='{jwt}'")
+        save_env(existing, "JWT_SECRET", jwt)
         eprint("  JWT_SECRET auto-generated.")
 
     # ── Defaults ──
@@ -180,20 +156,14 @@ def main():
         ("AI_MODEL", "llama-3.3-70b-versatile"),
         ("LANGFUSE_HOST", "https://cloud.langfuse.com"),
     ]:
-        val = os.environ.get(key) or default
-        if val != existing.get(key):
-            save_env(existing, key, val)
-        os.environ[key] = val
-        exports.append(f"export {key}='{val}'")
+        val = existing.get(key) or default
+        save_env(existing, key, val)
 
     eprint("")
     eprint("=" * 50)
     eprint("  Setup complete! Starting server...")
     eprint("=" * 50)
     eprint("")
-
-    # Only exports go to stdout for the shell to eval
-    print("\n".join(exports))
 
 
 if __name__ == "__main__":

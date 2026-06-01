@@ -21,7 +21,8 @@ fi
 
 # Interactive mode: use Python (handles TTY input more reliably than shell read)
 if [ -t 0 ]; then
-    eval "$(python scripts/setup_prompt.py)"
+    python scripts/setup_prompt.py
+    . "$ENV_FILE"
 fi
 
 APP_PORT="${PORT:-8000}"
